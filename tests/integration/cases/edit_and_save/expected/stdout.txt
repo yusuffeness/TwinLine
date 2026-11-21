@@ -1,0 +1,19 @@
+TwinLine <version> - type 'help' for the list of commands.
+twinline> Line 1 added.
+twinline> Line 2 added.
+twinline> Line 3 added.
+twinline>      1  first line
+     2  second line keeps inner   spaces
+     3  
+twinline> File     : (no file)
+Lines    : 3
+Modified : yes
+Folding  : default
+Analysis : idle
+twinline> Saved 3 lines.
+twinline> File     : notes.txt
+Lines    : 3
+Modified : no
+Folding  : default
+Analysis : idle
+twinline> 

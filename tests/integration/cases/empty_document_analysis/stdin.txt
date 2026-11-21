@@ -1,0 +1,3 @@
+analyze
+analyze-sync
+quit

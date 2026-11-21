@@ -1,0 +1,8 @@
+frobnicate
+show extra
+open
+open two words.txt
+save
+append!  x
+cancel
+quit

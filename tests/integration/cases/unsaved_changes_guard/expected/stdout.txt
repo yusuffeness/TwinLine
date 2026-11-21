@@ -1,0 +1,8 @@
+TwinLine <version> - type 'help' for the list of commands.
+twinline> Line 1 added.
+twinline> twinline> You have unsaved changes. Type 'quit' again to discard them, or 'save' first.
+twinline> Opened 'other.txt' (1 line).
+twinline>      1  existing
+twinline> Line 2 added.
+twinline> You have unsaved changes. Type 'quit' again to discard them, or 'save' first.
+twinline> 

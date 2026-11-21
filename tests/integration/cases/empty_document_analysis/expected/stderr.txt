@@ -1,0 +1,2 @@
+error: the document is empty. Use 'open' or 'append' first.
+error: the document is empty. Use 'open' or 'append' first.

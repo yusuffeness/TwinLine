@@ -1,0 +1,8 @@
+append first line
+append   second line keeps inner   spaces
+append
+show
+status
+save notes.txt
+status
+quit

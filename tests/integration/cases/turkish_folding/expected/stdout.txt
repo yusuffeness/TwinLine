@@ -1,0 +1,19 @@
+TwinLine <version> - type 'help' for the list of commands.
+Opened 'tr.txt' (3 lines).
+twinline> File     : tr.txt
+Lines    : 3
+Modified : no
+Folding  : turkish
+Analysis : idle
+twinline> Analysis finished:
+  Lines                       : 3 (3 with words)
+  Words                       : 9
+  Pairs compared              : 3
+  Identical pairs             : 1
+  Near-duplicate pairs (>=0.70): 0
+  Mean Jaccard similarity     : 0.6190
+  Most similar distinct pair  : lines 1 and 3 (J = 0.429)
+    1: IŞIK ve SİSTEM
+    3: ISIK ve sistem
+Finished in <time>
+twinline> 

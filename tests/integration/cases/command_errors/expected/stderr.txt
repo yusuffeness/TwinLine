@@ -1,0 +1,6 @@
+error: unknown command 'frobnicate'. Type 'help' for the list.
+error: 'show' takes no arguments.
+error: usage: open[!] FILE
+error: file names with spaces are not supported yet.
+error: no file name. Usage: save FILE
+error: unknown command 'append!'. Type 'help' for the list.

@@ -1,0 +1,1 @@
+error: cannot open 'nope.txt': No such file or directory

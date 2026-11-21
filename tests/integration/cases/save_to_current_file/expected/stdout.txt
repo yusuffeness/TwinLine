@@ -1,0 +1,10 @@
+TwinLine <version> - type 'help' for the list of commands.
+Opened 'doc.txt' (2 lines).
+twinline> Line 3 added.
+twinline> Saved 3 lines.
+twinline> File     : doc.txt
+Lines    : 3
+Modified : no
+Folding  : default
+Analysis : idle
+twinline> 

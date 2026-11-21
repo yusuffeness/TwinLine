@@ -1,0 +1,2 @@
+twinline: only one file can be opened, got an extra 'b.txt'
+Try 'twinline --help' for more information.

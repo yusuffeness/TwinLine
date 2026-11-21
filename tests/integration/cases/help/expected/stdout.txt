@@ -1,0 +1,14 @@
+TwinLine <version> - type 'help' for the list of commands.
+twinline> Commands:
+  open[!] FILE     Load FILE (use open! to discard unsaved changes)
+  append TEXT      Add TEXT as a new last line
+  show             Print the document with line numbers
+  save [FILE]      Save atomically to FILE or to the current file
+  analyze          Find near-duplicate lines in the background
+  analyze-sync     Find near-duplicate lines and wait for the result
+  cancel           Stop the running background analysis
+  status           Show the file, unsaved changes and analysis progress
+  help             Show this list
+  quit[!]          Exit (quit! discards unsaved changes)
+  exit[!]          Same as quit
+twinline> 

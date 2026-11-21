@@ -1,0 +1,8 @@
+append unsaved work
+open other.txt
+quit
+open! other.txt
+show
+append more
+quit
+quit

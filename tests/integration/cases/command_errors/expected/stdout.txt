@@ -1,0 +1,3 @@
+TwinLine <version> - type 'help' for the list of commands.
+twinline> twinline> twinline> twinline> twinline> twinline> twinline> No analysis is running.
+twinline> 

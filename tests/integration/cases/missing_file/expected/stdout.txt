@@ -1,0 +1,7 @@
+TwinLine <version> - type 'help' for the list of commands.
+twinline> File     : (no file)
+Lines    : 0
+Modified : no
+Folding  : default
+Analysis : idle
+twinline> 
