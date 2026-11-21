@@ -4,12 +4,14 @@
 BUILD_DIR   ?= build
 BUILD_TYPE  ?= Release
 CMAKE       ?= cmake
+PYTHON      ?= python3
+CORPUS_SIZE ?= 1MiB
 JOBS        ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 SOURCES     := $(shell find src include tests bench -name '*.[ch]' 2>/dev/null)
 
 .DEFAULT_GOAL := build
 
-.PHONY: help build debug release asan tsan run install clean format format-check tidy
+.PHONY: help build debug release asan tsan run install corpus clean format format-check tidy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -39,6 +41,9 @@ run: build ## Build and run twinline
 
 install: build ## Install into the CMake prefix (default /usr/local)
 	$(CMAKE) --install $(BUILD_DIR)
+
+corpus: ## Generate a test corpus in corpus/ (CORPUS_SIZE=1MiB)
+	$(PYTHON) scripts/gen_corpus.py --size $(CORPUS_SIZE) --output corpus/corpus-$(CORPUS_SIZE).txt
 
 clean: ## Remove all build directories
 	rm -rf build build-debug build-asan build-tsan
