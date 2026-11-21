@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Tests failed to build on macOS because the system headers hide `mkdtemp`
+  when `_XOPEN_SOURCE` is defined; `_DARWIN_C_SOURCE` is now set on Apple
+  platforms.
+
 ## [0.3.0] - 2026-11-21
 
 ### Added

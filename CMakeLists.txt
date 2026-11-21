@@ -48,6 +48,12 @@ add_library(twinline_options INTERFACE)
 
 target_compile_definitions(twinline_options INTERFACE _XOPEN_SOURCE=700)
 
+# macOS headers hide some POSIX 2008 functions (such as mkdtemp) when
+# _XOPEN_SOURCE is defined; _DARWIN_C_SOURCE makes them visible again.
+if(APPLE)
+  target_compile_definitions(twinline_options INTERFACE _DARWIN_C_SOURCE)
+endif()
+
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(
     twinline_options
