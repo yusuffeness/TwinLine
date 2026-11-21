@@ -98,6 +98,7 @@ jobs:
       - name: Integration tests under Valgrind
         env:
           TWINLINE_TEST_WRAPPER: valgrind --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --quiet
+          TWINLINE_TUI_TIMEOUT: "90"
         run: ctest --test-dir build -L integration --output-on-failure
 
   lint:

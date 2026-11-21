@@ -58,15 +58,15 @@ and leaves the repository in a working, presentable state.
 
 ## Milestone 4 - Terminal UI foundations (v0.5.0)
 
-- [ ] Raw mode, resize handling and terminal restore
-- [ ] Key decoder
-- [ ] Truecolor / 256-colour / no-colour fallback
-- [ ] Themes
-- [ ] Widgets: box, input, output block, status bar
-- [ ] Welcome screen with gradient logo
-- [ ] Slash-command menu with fuzzy search and completion
-- [ ] Command history and reverse search
-- [ ] Virtual screen buffer for UI tests
+- [x] Raw mode, resize handling and terminal restore
+- [x] Key decoder
+- [x] Truecolor / 256-colour / no-colour fallback
+- [x] Themes
+- [x] Widgets: box, input, output block, status bar
+- [x] Welcome screen with gradient logo
+- [x] Slash-command menu with fuzzy search and completion
+- [x] Command history and reverse search
+- [x] Virtual screen buffer for UI tests
 
 ## Milestone 5 - Animations and live views (v0.6.0)
 

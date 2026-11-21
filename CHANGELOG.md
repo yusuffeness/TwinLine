@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
+### Added
+
+- Interactive terminal UI, used automatically when standard input and output
+  are terminals:
+  - welcome banner with a gradient ASCII logo;
+  - rounded, coloured input box that wraps long lines and handles UTF-8,
+    wide characters and emoji;
+  - slash-command menu with fuzzy filtering and highlighted matches;
+  - `Tab` completion of commands and of file names after `/open` and
+    `/save`, with a menu when several files match;
+  - command history with `↑`/`↓` and reverse search with `Ctrl+R`;
+  - Emacs-style editing keys, word movement and bracketed paste;
+  - command results as indented blocks with ✔, ▲ and ✖ markers;
+  - live analysis progress, `Esc` to cancel, and background results shown
+    above the input without tearing it;
+  - status bar with the file, unsaved changes, line count, threads and mode;
+  - `?` for the keyboard shortcuts, `Ctrl+L` to clear, `Ctrl+C` twice to exit.
+- Colour support in 24-bit, 256-colour and no-colour modes, chosen from
+  `COLORTERM`, `TERM` and `NO_COLOR`.
+- Four themes: `dark`, `light`, `dracula` and `nord`.
+- Options `--theme=NAME`, `--no-color` and `--plain`.
+- The terminal is restored on exit and on SIGTERM, SIGHUP, SIGINT and
+  SIGQUIT; window resizes redraw the UI.
+- A cell-based canvas (virtual screen) that all widgets draw into, so the UI
+  is unit-tested as plain text without a terminal.
+- Unit tests for key decoding, line editing, history, fuzzy matching, file
+  completion, colours, the canvas and the widgets, and an end-to-end test that
+  drives the UI in a pseudo-terminal.
+- Dependabot groups all GitHub Actions updates into one pull request.
+
+### Changed
+
+- Commands write to the application's output streams instead of directly to
+  standard output, so the UI can capture and format their results.
+- The unsaved-changes notice on `quit` is a warning on standard error
+  (`warning: you have unsaved changes...`).
+
 ## [0.4.0] - 2026-11-22
 
 ### Added
@@ -124,7 +163,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.clang-format` and `.clang-tidy`.
 - MIT license, README and roadmap.
 
-[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/yusuffeness/TwinLine/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/yusuffeness/TwinLine/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/yusuffeness/TwinLine/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/yusuffeness/TwinLine/compare/v0.1.0...v0.2.0

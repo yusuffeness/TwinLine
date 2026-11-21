@@ -8,8 +8,9 @@ make test        # or: ctest --test-dir build --output-on-failure
 
 | Level | Where | What it checks |
 | ----- | ----- | -------------- |
-| Unit | `tests/unit/` | Each module in isolation: UTF-8 decoding and folding, feature sets, documents, file I/O, the analysis and the background job |
+| Unit | `tests/unit/` | Each module in isolation: UTF-8 decoding and folding, feature sets, documents, file I/O, the analysis, the background job, and the terminal UI (keys, line editing, completion, canvas, widgets) |
 | Integration | `tests/integration/cases/` | The real `twinline` binary, driven through standard input and compared with golden files |
+| Terminal UI | `tests/integration/tui_smoke.py` | The interactive UI in a pseudo-terminal: keys are typed and the screen is checked |
 | Fuzz | `tests/fuzz/` | Invariants of the UTF-8 decoder, the tokenizer and the command parser under random input |
 | Dynamic analysis | CI | AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer and Valgrind over the whole suite |
 
@@ -72,6 +73,23 @@ git diff tests/integration/cases/my_case
 
 Set `TWINLINE_TEST_WRAPPER` to run the binary under another tool, for example
 `TWINLINE_TEST_WRAPPER="valgrind --error-exitcode=99 -q"`.
+
+## Terminal UI tests
+
+The UI is drawn into a canvas, a grid of styled cells, before it is turned
+into escape sequences. Unit tests render widgets into a canvas and compare
+rows as plain text, so layout, wrapping and clipping are tested without a
+terminal:
+
+```c
+TW_CHECK_EQ_STR(row(&canvas, 0), "╭──────────╮");
+```
+
+`tests/integration/tui_smoke.py` starts the real binary in a pseudo-terminal,
+types keys (menus, Tab completion, history search, paste, Ctrl+C) and waits
+for the expected text on the screen. It needs a POSIX system and runs in CI
+on Linux and macOS, also under the sanitizers and Valgrind
+(`TWINLINE_TUI_TIMEOUT` raises its time limit for slow runs).
 
 ## Fuzzing
 

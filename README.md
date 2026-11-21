@@ -7,7 +7,7 @@
 [![CI](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml/badge.svg)](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/yusuffeness/TwinLine/graph/badge.svg)](https://codecov.io/gh/yusuffeness/TwinLine)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Version](https://img.shields.io/badge/version-0.4.0-blueviolet)
+![Version](https://img.shields.io/badge/version-0.5.0-blueviolet)
 ![Language](https://img.shields.io/badge/language-C17-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -16,9 +16,10 @@
 ---
 
 > [!NOTE]
-> TwinLine is under active development. v0.4.0 ships a line-based editor
-> with a parallel, exact near-duplicate analysis; the colourful terminal UI
-> arrives in v0.5.0. Follow the [roadmap](docs/ROADMAP.md) to see what is next.
+> TwinLine is under active development. v0.5.0 adds the colourful terminal
+> UI on top of the parallel, exact near-duplicate analysis; animations and
+> live views arrive in v0.6.0. Follow the [roadmap](docs/ROADMAP.md) to see
+> what is next.
 
 ## What is TwinLine?
 
@@ -38,22 +39,40 @@ make corpus                # generate a 1 MiB test corpus in corpus/
 ./build/twinline corpus/corpus-1MiB.txt
 ```
 
+In a terminal, TwinLine opens its interactive UI:
+
 ```text
-TwinLine 0.4.0 - type 'help' for the list of commands.
-Opened 'corpus/corpus-1MiB.txt' (16357 lines).
-twinline> analyze
-Analysing 16357 lines in the background. Use 'status' or 'cancel'.
-twinline> append This line was typed while the analysis was running.
-Line 16358 added.
-twinline> status
-File     : corpus/corpus-1MiB.txt
-Lines    : 16358
-Modified : yes
-Folding  : default
-Analysis : running, 41% done
+╭─────────────────────────────────────────────────────────────────╮
+│  ████████╗██╗    ██╗██╗███╗   ██╗██╗     ██╗███╗   ██╗███████╗  │
+│  ╚══██╔══╝██║    ██║██║████╗  ██║██║     ██║████╗  ██║██╔════╝  │
+│     ██║   ██║ █╗ ██║██║██╔██╗ ██║██║     ██║██╔██╗ ██║█████╗    │
+│     ██║   ██║███╗██║██║██║╚██╗██║██║     ██║██║╚██╗██║██╔══╝    │
+│     ██║   ╚███╔███╔╝██║██║ ╚████║███████╗██║██║ ╚████║███████╗  │
+│     ╚═╝    ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝  │
+│ ✻ Welcome to TwinLine v0.5.0                                    │
+│   /help for commands · ? for shortcuts · Tab to complete        │
+╰─────────────────────────────────────────────────────────────────╯
+
+> /analyze
+  ⎿ ✔ Analysing 16357 lines in the background. Use 'status' or 'cancel'.
+
+ ✶ Analyzing… 41% · 16 threads · esc to cancel
+╭────────────────────────────────────────────────────────────────────╮
+│ > /sh                                                              │
+╰────────────────────────────────────────────────────────────────────╯
+   /show  Print the document with line numbers
+ ▸ corpus-1MiB.txt · 16,357 lines · 16 threads · pruned
 ```
 
+Output scrolls like any terminal program; only the input box, the command
+menu and the status bar at the bottom are redrawn in place. Results of a
+background analysis appear above the input box without disturbing what you
+are typing.
+
 ### Commands
+
+Commands are typed with a leading `/` in the terminal UI (`/open notes.txt`);
+the `/` is optional in the plain interface.
 
 | Command          | Description                                                  |
 | ---------------- | ------------------------------------------------------------ |
@@ -75,6 +94,30 @@ Command-line options:
 | `--threads=N` | Worker threads for the analysis (default: one per processor) |
 | `--exhaustive` | Compare every pair; slower, but also reports the mean similarity |
 | `--fold=turkish` | Fold `I` to dotless `ı` as in Turkish (default folds it to `i`) |
+| `--theme=NAME` | Colour theme: `dark` (default), `light`, `dracula`, `nord` |
+| `--no-color` | No colours (the `NO_COLOR` environment variable works too) |
+| `--plain` | The plain line interface, as used when input is piped |
+
+### Keyboard
+
+| Key | Action |
+| --- | ------ |
+| `/` | Open the command menu; keep typing to filter it (fuzzy) |
+| `Tab` | Complete the selected command, or a file name after `/open` and `/save` |
+| `↑` `↓` | Move in the menu, or browse the command history |
+| `Ctrl+R` | Search the history |
+| `Esc` | Close the menu, or cancel a running analysis |
+| `Ctrl+A` `Ctrl+E` | Start / end of the line |
+| `Ctrl+←` `Ctrl+→` | Previous / next word |
+| `Ctrl+U` `Ctrl+K` `Ctrl+W` | Delete to the start, to the end, the previous word |
+| `Ctrl+L` | Clear the screen |
+| `?` | Show the shortcuts |
+| `Ctrl+C` twice | Exit |
+
+The UI uses 24-bit colour when the terminal announces it (`COLORTERM`), the
+256-colour palette otherwise, and no colour with `NO_COLOR` or `--no-color`.
+When input or output is not a terminal (pipes, scripts, CI), TwinLine falls
+back to the plain interface automatically.
 
 ### How the analysis works
 
@@ -158,7 +201,7 @@ clang-tidy and coverage reporting. See [docs/TESTING.md](docs/TESTING.md).
 
 ```
 include/twinline/   Public headers
-src/                Sources: core, analysis, tui, cmd, services, export
+src/                Sources: core, analysis, cmd (commands), tui (terminal UI)
 tests/              Unit, integration and fuzz tests
 bench/              Benchmarks
 scripts/            Helper scripts (test corpus generator, demo recording)
