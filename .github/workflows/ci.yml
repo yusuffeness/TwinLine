@@ -30,7 +30,7 @@ jobs:
           - { os: ubuntu-24.04, cc: clang }
           - { os: macos-15, cc: clang }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.cc }}
@@ -57,7 +57,7 @@ jobs:
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
       TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Recent runner kernels use more ASLR bits than the sanitizer runtimes expect.
       - name: Reduce ASLR entropy for the sanitizer runtimes
@@ -76,7 +76,7 @@ jobs:
     name: Valgrind
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Valgrind
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends valgrind
@@ -104,7 +104,7 @@ jobs:
     name: Format and static analysis
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -126,7 +126,7 @@ jobs:
     name: Coverage
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -164,7 +164,7 @@ jobs:
       matrix:
         target: [utf8, featureset, command_parse]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Reduce ASLR entropy for the sanitizer runtimes
         run: sudo sysctl -w vm.mmap_rnd_bits=28
@@ -196,7 +196,7 @@ jobs:
     name: Benchmark
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build (Release)
         run: |
