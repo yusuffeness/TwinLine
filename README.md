@@ -7,7 +7,7 @@
 [![CI](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml/badge.svg)](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/yusuffeness/TwinLine/graph/badge.svg)](https://codecov.io/gh/yusuffeness/TwinLine)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Version](https://img.shields.io/badge/version-0.3.0-blueviolet)
+![Version](https://img.shields.io/badge/version-0.4.0-blueviolet)
 ![Language](https://img.shields.io/badge/language-C17-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -16,8 +16,8 @@
 ---
 
 > [!NOTE]
-> TwinLine is under active development. v0.2.0 ships a working line-based
-> editor with background near-duplicate analysis; the colourful terminal UI
+> TwinLine is under active development. v0.4.0 ships a line-based editor
+> with a parallel, exact near-duplicate analysis; the colourful terminal UI
 > arrives in v0.5.0. Follow the [roadmap](docs/ROADMAP.md) to see what is next.
 
 ## What is TwinLine?
@@ -39,7 +39,7 @@ make corpus                # generate a 1 MiB test corpus in corpus/
 ```
 
 ```text
-TwinLine 0.3.0 - type 'help' for the list of commands.
+TwinLine 0.4.0 - type 'help' for the list of commands.
 Opened 'corpus/corpus-1MiB.txt' (16357 lines).
 twinline> analyze
 Analysing 16357 lines in the background. Use 'status' or 'cancel'.
@@ -68,9 +68,13 @@ Analysis : running, 41% done
 | `help`           | List the commands                                            |
 | `quit[!]`        | Exit; asks again when there are unsaved changes              |
 
-Command-line options: `twinline [--fold=default|turkish] [FILE]`. With
-`--fold=turkish`, `I` folds to dotless `ı` as in Turkish; by default it folds
-to `i`.
+Command-line options:
+
+| Option | Meaning |
+| ------ | ------- |
+| `--threads=N` | Worker threads for the analysis (default: one per processor) |
+| `--exhaustive` | Compare every pair; slower, but also reports the mean similarity |
+| `--fold=turkish` | Fold `I` to dotless `ı` as in Turkish (default folds it to `i`) |
 
 ### How the analysis works
 
@@ -80,8 +84,27 @@ curly quotes or dashes do not count as letters. Every pair of lines is then
 compared with the Jaccard similarity `|A ∩ B| / |A ∪ B|`; pairs at or above
 0.70 are reported as near duplicates.
 
-The analysis runs on a snapshot of the document in a worker thread, so you
-can keep editing while it runs.
+The comparison is split across all processor cores, and two exact filters
+skip pairs that provably cannot matter, so the answer is the same as a full
+all-pairs scan, only much faster. The analysis runs on a snapshot of the
+document, so you can keep editing while it runs. Details:
+[docs/ALGORITHMS.md](docs/ALGORITHMS.md).
+
+## Performance
+
+![Benchmark: analysis time and speed-up by number of threads](docs/assets/benchmark.png)
+
+On a 1 MiB corpus (16,357 lines, 134 million line pairs) on an Intel Core
+i7-13620H:
+
+| Mode | 1 thread | 16 threads | Speed-up |
+| ---- | -------- | ---------- | -------- |
+| Exhaustive (the original algorithm) | 16.5 s | 1.72 s | 9.6x |
+| Pruned (default) | 1.91 s | **0.30 s** | 6.5x |
+
+From the original single-threaded algorithm to the default mode on all
+cores, the same analysis runs **56 times faster** with identical results.
+Reproduce the chart on your machine with `make bench`.
 
 ## Planned features
 
@@ -119,6 +142,7 @@ Useful targets:
 | `make asan`    | Run the tests with AddressSanitizer and UBSan     |
 | `make tsan`    | Run the tests with ThreadSanitizer                |
 | `make coverage`| Coverage report with gcovr                        |
+| `make bench`   | Benchmark and redraw `docs/assets/benchmark.png`  |
 | `make corpus`  | Generate a test corpus (`CORPUS_SIZE=10MiB`)      |
 | `make format`  | Format the sources with clang-format              |
 | `make help`    | List every target                                 |

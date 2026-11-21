@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-22
+
+### Added
+
+- Parallel analysis: rows are handed out to worker threads in chunks from an
+  atomic cursor; each worker keeps private results that are merged at the
+  end, so the comparison loop takes no locks.
+- Two exact filters: a size-ratio bound that skips the rest of a row, and an
+  early exit from the set intersection once the threshold is out of reach.
+  On a 1 MiB corpus the default mode is 8.6x faster than the exhaustive scan
+  on one thread and 56x faster with 16 threads (16.5 s to 0.30 s on an
+  i7-13620H). All counts and the most similar pair are unchanged.
+- `--threads=N` and `--exhaustive` command-line options; `status` shows the
+  thread count and the mode.
+- The report shows the number of pairs actually compared and the thread
+  count.
+- `bench/bench_analysis` (median timings, CSV and JSON output),
+  `bench/plot.py`, `make bench` and `make bench-large`.
+- CI benchmark job that compares each run with the last run on `main`.
+- Correctness tests that compare the parallel engine with an independent
+  all-pairs implementation for 1-16 threads and several thresholds.
+- `docs/ALGORITHMS.md`.
+
+### Changed
+
+- Feature sets are built into one contiguous arena with a reusable builder
+  instead of one allocation per line.
+- The mean similarity is reported only in exhaustive mode.
+- Coverage builds use atomic profile counters, which multithreaded code
+  needs for correct coverage data.
+
 ### Fixed
 
 - Tests failed to build on macOS because the system headers hide `mkdtemp`
@@ -93,7 +124,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.clang-format` and `.clang-tidy`.
 - MIT license, README and roadmap.
 
-[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/yusuffeness/TwinLine/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/yusuffeness/TwinLine/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/yusuffeness/TwinLine/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yusuffeness/TwinLine/releases/tag/v0.1.0

@@ -48,13 +48,13 @@ and leaves the repository in a working, presentable state.
 
 ## Milestone 3 - Parallel analysis (v0.4.0)
 
-- [ ] Worker thread pool
-- [ ] Balanced split of the pair matrix
-- [ ] Lock-free per-thread results merged at the end
-- [ ] Size-based pruning
-- [ ] Arena allocation
-- [ ] Atomic progress counter
-- [ ] Benchmarks and speed-up chart
+- [x] Worker thread pool
+- [x] Balanced split of the pair matrix
+- [x] Lock-free per-thread results merged at the end
+- [x] Size-based pruning
+- [x] Arena allocation
+- [x] Atomic progress counter
+- [x] Benchmarks and speed-up chart
 
 ## Milestone 4 - Terminal UI foundations (v0.5.0)
 
