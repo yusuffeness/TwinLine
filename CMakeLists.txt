@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
   TwinLine
-  VERSION 0.4.0
+  VERSION 0.5.0
   DESCRIPTION "A concurrent terminal editor that finds the lines that look alike"
   HOMEPAGE_URL "https://github.com/yusuffeness/TwinLine"
   LANGUAGES C)
@@ -129,7 +129,17 @@ add_library(
   src/cmd/app.c
   src/cmd/commands.c
   src/cmd/report.c
-  src/cmd/repl.c)
+  src/cmd/repl.c
+  src/tui/strbuf.c
+  src/tui/color.c
+  src/tui/theme.c
+  src/tui/canvas.c
+  src/tui/widgets.c
+  src/tui/keys.c
+  src/tui/lineedit.c
+  src/tui/complete.c
+  src/tui/term.c
+  src/tui/ui.c)
 
 target_include_directories(
   twinline_core PUBLIC ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src
