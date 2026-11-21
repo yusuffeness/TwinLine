@@ -23,6 +23,27 @@ typedef struct tw_featureset {
 } tw_featureset;
 
 /*
+ * Reusable scratch space for building feature sets without allocating for
+ * every line. One builder must not be shared between threads.
+ */
+typedef struct tw_featureset_builder {
+    uint64_t *buf;
+    size_t cap;
+} tw_featureset_builder;
+
+void tw_featureset_builder_init(tw_featureset_builder *builder);
+void tw_featureset_builder_free(tw_featureset_builder *builder);
+
+/*
+ * Builds the feature set of `line` into the builder's scratch space. `view`
+ * points into that space and stays valid until the next call on the same
+ * builder or until it is freed; it must not be passed to
+ * tw_featureset_free(). Words are counted as in tw_featureset_build().
+ */
+tw_status tw_featureset_builder_build(tw_featureset_builder *builder, const char *line,
+                                      tw_fold_mode fold, tw_featureset *view, size_t *word_count);
+
+/*
  * Builds the feature set of `line`. Words are case-folded according to
  * `fold`. If `word_count` is not NULL, the number of words found is added
  * to it. An empty line produces an empty set (hashes == NULL).

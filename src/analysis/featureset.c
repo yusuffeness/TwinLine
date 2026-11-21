@@ -4,6 +4,7 @@
 #include "twinline/featureset.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #define FNV64_OFFSET 0xcbf29ce484222325ULL
 #define FNV64_PRIME  0x100000001b3ULL
@@ -28,23 +29,29 @@ static int compare_u64(const void *lhs, const void *rhs)
     return (a > b) - (a < b);
 }
 
-typedef struct hash_buffer {
-    uint64_t *data;
-    size_t count;
-    size_t cap;
-} hash_buffer;
-
-static tw_status hash_buffer_push(hash_buffer *buf, uint64_t value)
+void tw_featureset_builder_init(tw_featureset_builder *builder)
 {
-    if (buf->count == buf->cap) {
-        size_t new_cap = buf->cap ? buf->cap * 2 : 32;
-        uint64_t *data = realloc(buf->data, new_cap * sizeof *data);
-        if (data == NULL)
+    builder->buf = NULL;
+    builder->cap = 0;
+}
+
+void tw_featureset_builder_free(tw_featureset_builder *builder)
+{
+    free(builder->buf);
+    tw_featureset_builder_init(builder);
+}
+
+static tw_status builder_push(tw_featureset_builder *builder, size_t *count, uint64_t value)
+{
+    if (*count == builder->cap) {
+        size_t new_cap = builder->cap ? builder->cap * 2 : 64;
+        uint64_t *buf = realloc(builder->buf, new_cap * sizeof *buf);
+        if (buf == NULL)
             return TW_ERR_NOMEM;
-        buf->data = data;
-        buf->cap = new_cap;
+        builder->buf = buf;
+        builder->cap = new_cap;
     }
-    buf->data[buf->count++] = value;
+    builder->buf[(*count)++] = value;
     return TW_OK;
 }
 
@@ -58,16 +65,16 @@ static void hash_codepoint(uint64_t *hash, uint32_t cp)
     }
 }
 
-tw_status tw_featureset_build(const char *line, tw_fold_mode fold, tw_featureset *out,
-                              size_t *word_count)
+tw_status tw_featureset_builder_build(tw_featureset_builder *builder, const char *line,
+                                      tw_fold_mode fold, tw_featureset *view, size_t *word_count)
 {
-    hash_buffer buf = {NULL, 0, 0};
     const unsigned char *p = (const unsigned char *)line;
     uint64_t prev = 0;
     size_t words = 0;
+    size_t count = 0;
 
-    out->hashes = NULL;
-    out->count = 0;
+    view->hashes = NULL;
+    view->count = 0;
 
     while (*p != '\0') {
         uint32_t cp;
@@ -89,32 +96,53 @@ tw_status tw_featureset_build(const char *line, tw_fold_mode fold, tw_featureset
                 break;
         }
 
-        if (hash_buffer_push(&buf, hash) != TW_OK ||
-            (words > 0 && hash_buffer_push(&buf, mix_pair(prev, hash)) != TW_OK)) {
-            free(buf.data);
+        if (builder_push(builder, &count, hash) != TW_OK ||
+            (words > 0 && builder_push(builder, &count, mix_pair(prev, hash)) != TW_OK))
             return TW_ERR_NOMEM;
-        }
         prev = hash;
         words++;
     }
 
     if (word_count != NULL)
         *word_count += words;
-    if (buf.count == 0) {
-        free(buf.data);
+    if (count == 0)
         return TW_OK;
-    }
 
-    qsort(buf.data, buf.count, sizeof *buf.data, compare_u64);
+    uint64_t *data = builder->buf;
+    qsort(data, count, sizeof *data, compare_u64);
     size_t unique = 1;
-    for (size_t i = 1; i < buf.count; i++) {
-        if (buf.data[i] != buf.data[unique - 1])
-            buf.data[unique++] = buf.data[i];
+    for (size_t i = 1; i < count; i++) {
+        if (data[i] != data[unique - 1])
+            data[unique++] = data[i];
     }
 
-    out->hashes = buf.data;
-    out->count = unique;
+    view->hashes = data;
+    view->count = unique;
     return TW_OK;
+}
+
+tw_status tw_featureset_build(const char *line, tw_fold_mode fold, tw_featureset *out,
+                              size_t *word_count)
+{
+    tw_featureset_builder builder;
+    tw_featureset_builder_init(&builder);
+
+    tw_featureset view;
+    tw_status status = tw_featureset_builder_build(&builder, line, fold, &view, word_count);
+    out->hashes = NULL;
+    out->count = 0;
+    if (status == TW_OK && view.count > 0) {
+        out->hashes = malloc(view.count * sizeof *out->hashes);
+        if (out->hashes == NULL) {
+            status = TW_ERR_NOMEM;
+        } else {
+            memcpy(out->hashes, view.hashes, view.count * sizeof *out->hashes);
+            out->count = view.count;
+        }
+    }
+
+    tw_featureset_builder_free(&builder);
+    return status;
 }
 
 void tw_featureset_free(tw_featureset *set)
