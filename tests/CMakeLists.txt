@@ -9,7 +9,11 @@ set(TWINLINE_UNIT_TESTS
     fileio
     analysis
     parallel
-    job)
+    job
+    tui_keys
+    tui_lineedit
+    tui_complete
+    tui_render)
 
 foreach(name IN LISTS TWINLINE_UNIT_TESTS)
   add_executable(test_${name} unit/test_${name}.c)
@@ -37,6 +41,12 @@ if(Python3_Interpreter_FOUND)
       set_tests_properties(integration.${case_name} PROPERTIES LABELS integration TIMEOUT 180)
     endif()
   endforeach()
+
+  # End-to-end test of the interactive UI in a pseudo-terminal.
+  add_test(NAME integration.tui_smoke
+           COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/integration/tui_smoke.py
+                   --binary $<TARGET_FILE:twinline>)
+  set_tests_properties(integration.tui_smoke PROPERTIES LABELS "integration;tui" TIMEOUT 180)
 else()
   message(WARNING "Python 3 not found: integration tests are disabled")
 endif()
