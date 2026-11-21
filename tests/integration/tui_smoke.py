@@ -76,26 +76,37 @@ class Session:
         os.write(self.fd, keys.encode("utf-8"))
         time.sleep(0.15)
 
+    def drain(self, timeout: float) -> bool:
+        """Reads whatever output arrives within `timeout`. False once the pty is closed."""
+        ready, _, _ = select.select([self.fd], [], [], timeout)
+        if not ready:
+            return True
+        try:
+            chunk = os.read(self.fd, 65536)
+        except OSError:  # EIO on Linux once the child has exited
+            return False
+        if not chunk:
+            return False
+        self.raw += chunk
+        return True
+
     def wait_exit(self) -> int:
+        # Keep reading while waiting: the pty buffer is small (about 1 KiB on
+        # macOS), and a program that cannot write its last output never exits.
         deadline = time.time() + TIMEOUT
+        open_ = True
         while time.time() < deadline:
+            if open_:
+                open_ = self.drain(0.05)
+            else:
+                time.sleep(0.05)
             pid, status = os.waitpid(self.pid, os.WNOHANG)
             if pid != 0:
-                # Drain whatever was written last.
-                while True:
-                    ready, _, _ = select.select([self.fd], [], [], 0.2)
-                    if not ready:
+                while open_ and self.drain(0.2):
+                    if not select.select([self.fd], [], [], 0)[0]:
                         break
-                    try:
-                        chunk = os.read(self.fd, 65536)
-                    except OSError:
-                        break
-                    if not chunk:
-                        break
-                    self.raw += chunk
                 return os.waitstatus_to_exitcode(status)
-            time.sleep(0.05)
-        raise AssertionError("program did not exit")
+        raise AssertionError("program did not exit\n--- screen ---\n" + self.plain()[-2000:])
 
 
 def session_one(argv: list[str], tmp: str) -> None:
