@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
   TwinLine
-  VERSION 0.3.0
+  VERSION 0.4.0
   DESCRIPTION "A concurrent terminal editor that finds the lines that look alike"
   HOMEPAGE_URL "https://github.com/yusuffeness/TwinLine"
   LANGUAGES C)
@@ -29,6 +29,7 @@ option(TWINLINE_ENABLE_UBSAN "Build with UndefinedBehaviorSanitizer" OFF)
 option(TWINLINE_ENABLE_TSAN "Build with ThreadSanitizer" OFF)
 option(TWINLINE_ENABLE_COVERAGE "Instrument the build for code coverage" OFF)
 option(TWINLINE_BUILD_TESTS "Build the unit, integration and fuzz regression tests" ON)
+option(TWINLINE_BUILD_BENCHMARKS "Build the benchmark programs" ON)
 option(TWINLINE_BUILD_FUZZERS "Build the fuzz targets with libFuzzer (Clang only)" OFF)
 
 if(TWINLINE_ENABLE_TSAN AND TWINLINE_ENABLE_ASAN)
@@ -89,7 +90,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   endif()
 
   if(TWINLINE_ENABLE_COVERAGE)
-    target_compile_options(twinline_options INTERFACE --coverage -O0 -g)
+    # Atomic counters: the analysis runs on several threads, and racy counter
+    # updates would corrupt the coverage data.
+    target_compile_options(twinline_options INTERFACE --coverage -fprofile-update=atomic -O0 -g)
     target_link_options(twinline_options INTERFACE --coverage)
     message(STATUS "TwinLine: coverage instrumentation enabled")
   endif()
@@ -118,6 +121,7 @@ add_library(
   src/core/document.c
   src/core/fileio.c
   src/core/session.c
+  src/core/sysinfo.c
   src/analysis/utf8.c
   src/analysis/featureset.c
   src/analysis/analysis.c
@@ -144,6 +148,10 @@ target_link_libraries(twinline PRIVATE twinline_core)
 if(TWINLINE_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
+endif()
+
+if(TWINLINE_BUILD_BENCHMARKS)
+  add_subdirectory(bench)
 endif()
 
 # ---------------------------------------------------------------------------
