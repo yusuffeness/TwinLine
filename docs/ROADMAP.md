@@ -27,13 +27,13 @@ and leaves the repository in a working, presentable state.
 
 ## Milestone 1 - Modular core (v0.2.0)
 
-- [ ] Split the original single-file program into `core`, `analysis` and `cmd` modules
-- [ ] UTF-8 aware case folding (including Turkish I/i and dotless i) and punctuation handling
-- [ ] 64-bit hashing
-- [ ] Atomic save (write to a temporary file, then rename)
-- [ ] Unsaved-changes tracking and exit warning
-- [ ] Cancellable analysis
-- [ ] Test corpus generator (`make corpus`)
+- [x] Split the original single-file program into `core`, `analysis` and `cmd` modules
+- [x] UTF-8 aware case folding (including Turkish I/i and dotless i) and punctuation handling
+- [x] 64-bit hashing
+- [x] Atomic save (write to a temporary file, then rename)
+- [x] Unsaved-changes tracking and exit warning
+- [x] Cancellable analysis
+- [x] Test corpus generator (`make corpus`)
 
 ## Milestone 2 - Tests and CI (v0.3.0)
 

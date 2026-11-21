@@ -5,7 +5,7 @@
 **A concurrent terminal editor that finds the lines that look alike.**
 
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Version](https://img.shields.io/badge/version-0.1.0-blueviolet)
+![Version](https://img.shields.io/badge/version-0.2.0-blueviolet)
 ![Language](https://img.shields.io/badge/language-C17-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -14,9 +14,9 @@
 ---
 
 > [!NOTE]
-> TwinLine is under active development. This release (v0.1.0) sets up the
-> project skeleton and build system. Follow the [roadmap](docs/ROADMAP.md)
-> to see what is coming next.
+> TwinLine is under active development. v0.2.0 ships a working line-based
+> editor with background near-duplicate analysis; the colourful terminal UI
+> arrives in v0.5.0. Follow the [roadmap](docs/ROADMAP.md) to see what is next.
 
 ## What is TwinLine?
 
@@ -27,6 +27,59 @@ keep typing.
 
 It started as a university assignment on POSIX threads and is being rebuilt
 from the ground up as a polished, open-source tool.
+
+## Quick start
+
+```sh
+make                       # build
+make corpus                # generate a 1 MiB test corpus in corpus/
+./build/twinline corpus/corpus-1MiB.txt
+```
+
+```text
+TwinLine 0.2.0 - type 'help' for the list of commands.
+Opened 'corpus/corpus-1MiB.txt' (16357 lines).
+twinline> analyze
+Analysing 16357 lines in the background. Use 'status' or 'cancel'.
+twinline> append This line was typed while the analysis was running.
+Line 16358 added.
+twinline> status
+File     : corpus/corpus-1MiB.txt
+Lines    : 16358
+Modified : yes
+Folding  : default
+Analysis : running, 41% done
+```
+
+### Commands
+
+| Command          | Description                                                  |
+| ---------------- | ------------------------------------------------------------ |
+| `open[!] FILE`   | Load a file (`open!` discards unsaved changes)               |
+| `append TEXT`    | Add a line at the end                                        |
+| `show`           | Print the document with line numbers                         |
+| `save [FILE]`    | Save atomically to `FILE` or to the current file             |
+| `analyze`        | Find near-duplicate lines in the background                  |
+| `analyze-sync`   | Same, but wait for the result                                |
+| `cancel`         | Stop the running analysis                                    |
+| `status`         | File, unsaved changes and analysis progress                  |
+| `help`           | List the commands                                            |
+| `quit[!]`        | Exit; asks again when there are unsaved changes              |
+
+Command-line options: `twinline [--fold=default|turkish] [FILE]`. With
+`--fold=turkish`, `I` folds to dotless `ı` as in Turkish; by default it folds
+to `i`.
+
+### How the analysis works
+
+Each line becomes a set of word and word-pair (bigram) hashes. Words are
+split on Unicode-aware boundaries and case-folded, so `ÇAY` matches `çay` and
+curly quotes or dashes do not count as letters. Every pair of lines is then
+compared with the Jaccard similarity `|A ∩ B| / |A ∪ B|`; pairs at or above
+0.70 are reported as near duplicates.
+
+The analysis runs on a snapshot of the document in a worker thread, so you
+can keep editing while it runs.
 
 ## Planned features
 
@@ -62,6 +115,7 @@ Useful targets:
 | `make debug`   | Debug build in `build-debug/`                     |
 | `make asan`    | Build with AddressSanitizer and UBSan             |
 | `make tsan`    | Build with ThreadSanitizer                        |
+| `make corpus`  | Generate a test corpus (`CORPUS_SIZE=10MiB`)      |
 | `make format`  | Format the sources with clang-format              |
 | `make help`    | List every target                                 |
 
@@ -78,7 +132,7 @@ docs/               Roadmap, architecture notes and design decisions
 
 ## Roadmap
 
-TwinLine is built in ten milestones, from this skeleton (v0.1.0) to a
+TwinLine is built in ten milestones, from the project skeleton (v0.1.0) to a
 packaged v1.0.0 release. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
