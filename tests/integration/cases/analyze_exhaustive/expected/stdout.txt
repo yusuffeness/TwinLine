@@ -1,0 +1,22 @@
+TwinLine <version> - type 'help' for the list of commands.
+Opened 'sample.txt' (7 lines).
+twinline> File     : sample.txt
+Lines    : 7
+Modified : no
+Folding  : default
+Threads  : 3
+Mode     : exhaustive
+Analysis : idle
+twinline> Analysis finished:
+  Lines                       : 7 (6 with words)
+  Words                       : 36
+  Line pairs                  : 15
+  Pairs compared              : 15 (exhaustive)
+  Identical pairs             : 2
+  Near-duplicate pairs (>=0.70): 0
+  Mean Jaccard similarity     : 0.2510
+  Most similar distinct pair  : lines 1 and 3 (J = 0.692)
+    1: The server answered every request quickly.
+    3: The server answered every request slowly.
+Finished in <time>
+twinline> 

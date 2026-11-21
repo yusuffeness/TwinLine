@@ -8,6 +8,7 @@ set(TWINLINE_UNIT_TESTS
     document
     fileio
     analysis
+    parallel
     job)
 
 foreach(name IN LISTS TWINLINE_UNIT_TESTS)

@@ -9,11 +9,15 @@ twinline> File     : (no file)
 Lines    : 3
 Modified : yes
 Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
 Analysis : idle
 twinline> Saved 3 lines.
 twinline> File     : notes.txt
 Lines    : 3
 Modified : no
 Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
 Analysis : idle
 twinline> 

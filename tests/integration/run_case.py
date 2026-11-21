@@ -11,9 +11,9 @@ A case is a directory under tests/integration/cases/ containing:
     expected/exit.txt    expected exit status (optional, default: 0)
     expected/files/      files that must exist afterwards with this content
 
-Timings ("Finished in 0.123 s") and the version ("TwinLine 1.2.3") are
-replaced by placeholders before comparing, so results depend neither on the
-machine nor on the release.
+Timings ("Finished in 0.123 s with 4 threads"), the automatic thread count and
+the version ("TwinLine 1.2.3") are replaced by placeholders before comparing,
+so results depend neither on the machine nor on the release.
 
 Usage:
     run_case.py --binary build/twinline --case tests/integration/cases/help
@@ -36,13 +36,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-TIMING = re.compile(r"Finished in \d+\.\d+ s")
+TIMING = re.compile(r"Finished in \d+\.\d+ s with \d+ threads?")
 VERSION = re.compile(r"TwinLine \d+\.\d+\.\d+")
+AUTO_THREADS = re.compile(r"Threads  : \d+ \(one per processor\)")
 TIMEOUT_SECONDS = 120
 
 
 def normalise(text: str) -> str:
     text = TIMING.sub("Finished in <time>", text)
+    text = AUTO_THREADS.sub("Threads  : <auto> (one per processor)", text)
     return VERSION.sub("TwinLine <version>", text)
 
 

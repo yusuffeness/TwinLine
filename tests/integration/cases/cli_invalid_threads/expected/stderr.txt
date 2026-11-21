@@ -1,0 +1,2 @@
+twinline: thread count must be between 1 and 256, got '--threads=0'
+Try 'twinline --help' for more information.

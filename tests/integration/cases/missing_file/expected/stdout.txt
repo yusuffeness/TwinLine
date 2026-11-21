@@ -3,5 +3,7 @@ twinline> File     : (no file)
 Lines    : 0
 Modified : no
 Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
 Analysis : idle
 twinline> 

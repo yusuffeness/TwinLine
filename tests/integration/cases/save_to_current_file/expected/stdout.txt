@@ -6,5 +6,7 @@ twinline> File     : doc.txt
 Lines    : 3
 Modified : no
 Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
 Analysis : idle
 twinline> 
