@@ -1,0 +1,115 @@
+# Roadmap
+
+TwinLine is developed in ten milestones. Each one ends with a tagged release
+and leaves the repository in a working, presentable state.
+
+| Milestone | Version | Theme |
+| --------- | ------- | ----- |
+| 0 | v0.1.0 | Project skeleton and build system |
+| 1 | v0.2.0 | Modular core, Unicode handling and robustness fixes |
+| 2 | v0.3.0 | Tests and continuous integration |
+| 3 | v0.4.0 | Parallel analysis engine and benchmarks |
+| 4 | v0.5.0 | Terminal UI foundations |
+| 5 | v0.6.0 | Animations and live views |
+| 6 | v0.7.0 | Editing features |
+| 7 | v0.8.0 | Advanced analysis: MinHash/LSH, clustering, export |
+| 8 | v0.9.0 | Services, configuration and scripting mode |
+| 9 | v1.0.0 | Packaging, documentation and launch |
+
+## Milestone 0 - Project skeleton (v0.1.0)
+
+- [x] Directory layout
+- [x] CMake build with strict warnings and sanitizer options
+- [x] Makefile wrapper
+- [x] Minimal executable with `--help` and `--version`
+- [x] Repository configuration (gitignore, gitattributes, editorconfig, clang-format, clang-tidy)
+- [x] License, README, changelog and roadmap
+
+## Milestone 1 - Modular core (v0.2.0)
+
+- [ ] Split the original single-file program into `core`, `analysis` and `cmd` modules
+- [ ] UTF-8 aware case folding (including Turkish I/i and dotless i) and punctuation handling
+- [ ] 64-bit hashing
+- [ ] Atomic save (write to a temporary file, then rename)
+- [ ] Unsaved-changes tracking and exit warning
+- [ ] Cancellable analysis
+- [ ] Test corpus generator (`make corpus`)
+
+## Milestone 2 - Tests and CI (v0.3.0)
+
+- [ ] Unit tests for the tokenizer, UTF-8, Jaccard, document and file I/O
+- [ ] Integration tests with golden files
+- [ ] GitHub Actions: GCC and Clang on Ubuntu and macOS
+- [ ] AddressSanitizer, UBSan, ThreadSanitizer and Valgrind jobs
+- [ ] clang-format and clang-tidy checks
+- [ ] Coverage reporting
+- [ ] Fuzz targets for the command parser and UTF-8 decoder
+- [ ] CodeQL
+
+## Milestone 3 - Parallel analysis (v0.4.0)
+
+- [ ] Worker thread pool
+- [ ] Balanced split of the pair matrix
+- [ ] Lock-free per-thread results merged at the end
+- [ ] Size-based pruning
+- [ ] Arena allocation
+- [ ] Atomic progress counter
+- [ ] Benchmarks and speed-up chart
+
+## Milestone 4 - Terminal UI foundations (v0.5.0)
+
+- [ ] Raw mode, resize handling and terminal restore
+- [ ] Key decoder
+- [ ] Truecolor / 256-colour / no-colour fallback
+- [ ] Themes
+- [ ] Widgets: box, input, output block, status bar
+- [ ] Welcome screen with gradient logo
+- [ ] Slash-command menu with fuzzy search and completion
+- [ ] Command history and reverse search
+- [ ] Virtual screen buffer for UI tests
+
+## Milestone 5 - Animations and live views (v0.6.0)
+
+- [ ] Render thread at 30 FPS with damage tracking
+- [ ] Spinner and shimmer
+- [ ] Live analysis line with cancel on Esc
+- [ ] Gradient progress bar and per-thread panel
+- [ ] Breathing border, logo shine, counting results, toasts
+- [ ] Coloured diff view
+- [ ] `--no-animation` and reduced motion
+
+## Milestone 6 - Editing features (v0.7.0)
+
+- [ ] Insert, delete, replace and inline edit
+- [ ] Paged show, goto and find
+- [ ] Undo and redo
+- [ ] Multiple buffers
+- [ ] Large-file mode with `mmap`
+
+## Milestone 7 - Advanced analysis (v0.8.0)
+
+- [ ] Exact strategy
+- [ ] MinHash + LSH
+- [ ] Union-find clustering
+- [ ] Interactive de-duplication
+- [ ] Runtime settings (`/set`)
+- [ ] JSON, CSV and HTML export
+- [ ] Accuracy benchmark
+
+## Milestone 8 - Services and scripting (v0.9.0)
+
+- [ ] Autosave and crash recovery
+- [ ] File watching
+- [ ] TOML configuration
+- [ ] Subcommands and flags
+- [ ] JSON output and exit codes
+
+## Milestone 9 - Launch (v1.0.0)
+
+- [ ] Release binaries for Linux and macOS
+- [ ] Homebrew tap, Debian package and Docker image
+- [ ] Man page
+- [ ] Architecture, algorithm and configuration docs
+- [ ] Logo and demo GIF
+- [ ] Contributing guide, code of conduct, security policy and templates
+- [ ] v1.0.0 release
