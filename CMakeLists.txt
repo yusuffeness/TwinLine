@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
   TwinLine
-  VERSION 0.1.0
+  VERSION 0.2.0
   DESCRIPTION "A concurrent terminal editor that finds the lines that look alike"
   HOMEPAGE_URL "https://github.com/yusuffeness/TwinLine"
   LANGUAGES C)
@@ -43,7 +43,7 @@ find_package(Threads REQUIRED)
 # ---------------------------------------------------------------------------
 add_library(twinline_options INTERFACE)
 
-target_compile_definitions(twinline_options INTERFACE _POSIX_C_SOURCE=200809L)
+target_compile_definitions(twinline_options INTERFACE _XOPEN_SOURCE=700)
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(
@@ -87,13 +87,33 @@ configure_file(${PROJECT_SOURCE_DIR}/cmake/version.h.in
                ${PROJECT_BINARY_DIR}/generated/twinline/version.h @ONLY)
 
 # ---------------------------------------------------------------------------
+# Library: everything except main(), so tests and benchmarks can link to it
+# ---------------------------------------------------------------------------
+add_library(
+  twinline_core STATIC
+  src/core/status.c
+  src/core/document.c
+  src/core/fileio.c
+  src/core/session.c
+  src/analysis/utf8.c
+  src/analysis/featureset.c
+  src/analysis/analysis.c
+  src/analysis/job.c
+  src/cmd/app.c
+  src/cmd/commands.c
+  src/cmd/report.c
+  src/cmd/repl.c)
+
+target_include_directories(
+  twinline_core PUBLIC ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src
+                       ${PROJECT_BINARY_DIR}/generated)
+target_link_libraries(twinline_core PUBLIC twinline_options Threads::Threads)
+
+# ---------------------------------------------------------------------------
 # Executable
 # ---------------------------------------------------------------------------
 add_executable(twinline src/main.c)
-
-target_include_directories(twinline PRIVATE ${PROJECT_SOURCE_DIR}/include
-                                            ${PROJECT_BINARY_DIR}/generated)
-target_link_libraries(twinline PRIVATE twinline_options Threads::Threads)
+target_link_libraries(twinline PRIVATE twinline_core)
 
 # ---------------------------------------------------------------------------
 # Install
