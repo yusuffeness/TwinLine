@@ -268,6 +268,9 @@ static void cmd_status(tw_app *app, const char *arg, bool force)
     pthread_mutex_unlock(&app->session.lock);
 
     printf("Folding  : %s\n", app->options.fold == TW_FOLD_TURKISH ? "turkish" : "default");
+    size_t threads = tw_analysis_thread_count(&app->options);
+    printf("Threads  : %zu%s\n", threads, app->options.threads == 0 ? " (one per processor)" : "");
+    printf("Mode     : %s\n", app->options.exhaustive ? "exhaustive" : "pruned");
     if (tw_job_is_running(&app->job))
         printf("Analysis : running, %.0f%% done\n",
                100.0 * tw_analysis_progress_fraction(&app->job.progress));

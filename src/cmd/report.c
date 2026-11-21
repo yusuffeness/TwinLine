@@ -9,15 +9,22 @@ void tw_report_print(FILE *out, const char *title, const tw_analysis_result *r)
     fprintf(out, "  Lines                       : %zu (%zu with words)\n", r->lines_total,
             r->lines_with_words);
     fprintf(out, "  Words                       : %zu\n", r->words_total);
-    fprintf(out, "  Pairs compared              : %llu\n", r->pairs);
+    fprintf(out, "  Line pairs                  : %llu\n", r->pairs);
+    if (r->exhaustive)
+        fprintf(out, "  Pairs compared              : %llu (exhaustive)\n", r->compared);
+    else
+        fprintf(out, "  Pairs compared              : %llu (%llu skipped by the size bound)\n",
+                r->compared, r->pairs - r->compared);
     fprintf(out, "  Identical pairs             : %llu\n", r->identical);
     fprintf(out, "  Near-duplicate pairs (>=%.2f): %llu\n", r->threshold, r->near);
-    fprintf(out, "  Mean Jaccard similarity     : %.4f\n", r->mean_similarity);
+    if (r->exhaustive)
+        fprintf(out, "  Mean Jaccard similarity     : %.4f\n", r->mean_similarity);
     if (r->best_similarity > 0.0) {
         fprintf(out, "  Most similar distinct pair  : lines %zu and %zu (J = %.3f)\n", r->best_a,
                 r->best_b, r->best_similarity);
         fprintf(out, "    %zu: %s\n", r->best_a, r->best_a_text);
         fprintf(out, "    %zu: %s\n", r->best_b, r->best_b_text);
     }
-    fprintf(out, "Finished in %.3f s\n", r->seconds);
+    fprintf(out, "Finished in %.3f s with %zu thread%s\n", r->seconds, r->threads,
+            r->threads == 1 ? "" : "s");
 }

@@ -21,6 +21,8 @@ enum {
 typedef struct cli_options {
     const char *file;
     tw_fold_mode fold;
+    size_t threads;
+    bool exhaustive;
 } cli_options;
 
 /* Returns the executable name without its directory, for messages. */
@@ -47,6 +49,8 @@ static void print_usage(FILE *out, const char *prog)
             "\n"
             "Options:\n"
             "  --fold=MODE      Case folding for analysis: 'default' or 'turkish'\n"
+            "  --threads=N      Worker threads for analysis (default: one per processor)\n"
+            "  --exhaustive     Compare every pair of lines (slower; adds the mean similarity)\n"
             "  -h, --help       Show this help and exit\n"
             "  -V, --version    Show version information and exit\n"
             "\n"
@@ -59,6 +63,22 @@ static int usage_error(const char *prog, const char *message, const char *arg)
     fprintf(stderr, "%s: %s '%s'\n", prog, message, arg);
     fprintf(stderr, "Try '%s --help' for more information.\n", prog);
     return TW_EXIT_USAGE;
+}
+
+/* Parses a thread count in [1, TW_MAX_THREADS]; returns 0 if invalid. */
+static size_t parse_threads(const char *text)
+{
+    size_t value = 0;
+    if (*text == '\0')
+        return 0;
+    for (const char *p = text; *p != '\0'; p++) {
+        if (*p < '0' || *p > '9')
+            return 0;
+        value = value * 10 + (size_t)(*p - '0');
+        if (value > TW_MAX_THREADS)
+            return 0;
+    }
+    return value;
 }
 
 /* Returns -1 to continue, otherwise the exit code. */
@@ -81,6 +101,12 @@ static int parse_args(int argc, char **argv, const char *prog, cli_options *opts
                 opts->fold = TW_FOLD_DEFAULT;
             } else if (strcmp(arg, "--fold=turkish") == 0) {
                 opts->fold = TW_FOLD_TURKISH;
+            } else if (strncmp(arg, "--threads=", 10) == 0) {
+                opts->threads = parse_threads(arg + 10);
+                if (opts->threads == 0)
+                    return usage_error(prog, "thread count must be between 1 and 256, got", arg);
+            } else if (strcmp(arg, "--exhaustive") == 0) {
+                opts->exhaustive = true;
             } else {
                 return usage_error(prog, "unknown option", arg);
             }
@@ -97,7 +123,7 @@ static int parse_args(int argc, char **argv, const char *prog, cli_options *opts
 int main(int argc, char **argv)
 {
     const char *prog = program_name(argc > 0 ? argv[0] : NULL);
-    cli_options opts = {NULL, TW_FOLD_DEFAULT};
+    cli_options opts = {NULL, TW_FOLD_DEFAULT, 0, false};
 
     int exit_code = parse_args(argc, argv, prog, &opts);
     if (exit_code >= 0)
@@ -109,6 +135,8 @@ int main(int argc, char **argv)
         return TW_EXIT_FAILURE;
     }
     app.options.fold = opts.fold;
+    app.options.threads = opts.threads;
+    app.options.exhaustive = opts.exhaustive;
 
     printf("%s %s - type 'help' for the list of commands.\n", TWINLINE_NAME, TWINLINE_VERSION);
     if (opts.file != NULL)
