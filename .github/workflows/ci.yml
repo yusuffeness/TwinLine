@@ -1,0 +1,193 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CLANG_FORMAT_VERSION: "23.1.5"
+  CLANG_TIDY_VERSION: "23.1.4"
+  GCOVR_VERSION: "8.8"
+
+jobs:
+  build:
+    name: Build and test (${{ matrix.os }}, ${{ matrix.cc }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, cc: gcc }
+          - { os: ubuntu-24.04, cc: clang }
+          - { os: macos-15, cc: clang }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.cc }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --parallel 4
+
+  sanitizers:
+    name: Sanitizers (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ASan + UBSan
+            flags: -DTWINLINE_ENABLE_ASAN=ON -DTWINLINE_ENABLE_UBSAN=ON
+          - name: TSan
+            flags: -DTWINLINE_ENABLE_TSAN=ON
+    env:
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+    steps:
+      - uses: actions/checkout@v4
+
+      # Recent runner kernels use more ASLR bits than the sanitizer runtimes expect.
+      - name: Reduce ASLR entropy for the sanitizer runtimes
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang ${{ matrix.flags }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --parallel 2
+
+  valgrind:
+    name: Valgrind
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Valgrind
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends valgrind
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build --parallel
+
+      - name: Unit tests under Valgrind
+        run: |
+          for test in build/tests/test_*; do
+            echo "::group::$(basename "$test")"
+            valgrind --error-exitcode=99 --leak-check=full \
+              --errors-for-leak-kinds=definite,indirect --quiet "$test"
+            echo "::endgroup::"
+          done
+
+      - name: Integration tests under Valgrind
+        env:
+          TWINLINE_TEST_WRAPPER: valgrind --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --quiet
+        run: ctest --test-dir build -L integration --output-on-failure
+
+  lint:
+    name: Format and static analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned LLVM tools
+        run: pip install "clang-format==${CLANG_FORMAT_VERSION}" "clang-tidy==${CLANG_TIDY_VERSION}"
+
+      - name: clang-format
+        run: make format-check
+
+      - name: Configure (compile database for clang-tidy)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: clang-tidy
+        run: clang-tidy -p build --quiet src/*.c src/*/*.c
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gcovr
+        run: pip install "gcovr==${GCOVR_VERSION}"
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DTWINLINE_ENABLE_COVERAGE=ON
+          cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --parallel 4
+
+      - name: Coverage report
+        run: |
+          gcovr --root . --object-directory build --filter src/ \
+            --xml coverage.xml --print-summary --fail-under-line 80 \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  fuzz:
+    name: Fuzz (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [utf8, featureset, command_parse]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reduce ASLR entropy for the sanitizer runtimes
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang
+          -DTWINLINE_BUILD_FUZZERS=ON -DTWINLINE_ENABLE_ASAN=ON -DTWINLINE_ENABLE_UBSAN=ON
+
+      # Only the fuzz targets are built: in this configuration the library is
+      # instrumented for libFuzzer and cannot be linked into ordinary programs.
+      - name: Build
+        run: cmake --build build --target fuzz_${{ matrix.target }}
+
+      - name: Fuzz for 60 seconds
+        run: |
+          mkdir -p corpus artifacts
+          ./build/tests/fuzz_${{ matrix.target }} -max_total_time=60 -max_len=4096 \
+            -artifact_prefix=artifacts/ corpus tests/fuzz/corpus/${{ matrix.target }}
+
+      - name: Upload crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: artifacts/

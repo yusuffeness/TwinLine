@@ -11,7 +11,7 @@ SOURCES     := $(shell find src include tests bench -name '*.[ch]' 2>/dev/null)
 
 .DEFAULT_GOAL := build
 
-.PHONY: help build debug release asan tsan run install corpus clean format format-check tidy
+.PHONY: help build debug release test asan tsan coverage run install corpus clean format format-check tidy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -27,14 +27,26 @@ debug: ## Debug build in build-debug/
 release: ## Optimised build in build/
 	$(MAKE) build BUILD_TYPE=Release
 
-asan: ## Debug build with AddressSanitizer + UBSan in build-asan/
+test: build ## Build and run every test with CTest
+	ctest --test-dir $(BUILD_DIR) --output-on-failure --parallel $(JOBS)
+
+asan: ## AddressSanitizer + UBSan build in build-asan/, then run the tests
 	$(CMAKE) -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \
 		-DTWINLINE_ENABLE_ASAN=ON -DTWINLINE_ENABLE_UBSAN=ON
 	$(CMAKE) --build build-asan -j $(JOBS)
+	ctest --test-dir build-asan --output-on-failure --parallel $(JOBS)
 
-tsan: ## Debug build with ThreadSanitizer in build-tsan/
+tsan: ## ThreadSanitizer build in build-tsan/, then run the tests
 	$(CMAKE) -S . -B build-tsan -DCMAKE_BUILD_TYPE=Debug -DTWINLINE_ENABLE_TSAN=ON
 	$(CMAKE) --build build-tsan -j $(JOBS)
+	ctest --test-dir build-tsan --output-on-failure --parallel $(JOBS)
+
+coverage: ## Coverage build, run the tests and print a gcovr summary
+	$(CMAKE) -S . -B build-coverage -DCMAKE_BUILD_TYPE=Debug -DTWINLINE_ENABLE_COVERAGE=ON
+	$(CMAKE) --build build-coverage -j $(JOBS)
+	find build-coverage -name '*.gcda' -delete
+	ctest --test-dir build-coverage --output-on-failure --parallel $(JOBS)
+	gcovr --root . --object-directory build-coverage --filter src/ --print-summary
 
 run: build ## Build and run twinline
 	./$(BUILD_DIR)/twinline
@@ -46,7 +58,7 @@ corpus: ## Generate a test corpus in corpus/ (CORPUS_SIZE=1MiB)
 	$(PYTHON) scripts/gen_corpus.py --size $(CORPUS_SIZE) --output corpus/corpus-$(CORPUS_SIZE).txt
 
 clean: ## Remove all build directories
-	rm -rf build build-debug build-asan build-tsan
+	rm -rf build build-debug build-asan build-tsan build-coverage
 
 format: ## Format all C sources in place with clang-format
 	clang-format -i $(SOURCES)
@@ -54,5 +66,5 @@ format: ## Format all C sources in place with clang-format
 format-check: ## Fail if any C source is not formatted
 	clang-format --dry-run --Werror $(SOURCES)
 
-tidy: build ## Run clang-tidy using the compile database
-	clang-tidy -p $(BUILD_DIR) $(filter %.c,$(SOURCES))
+tidy: build ## Run clang-tidy on the sources using the compile database
+	clang-tidy -p $(BUILD_DIR) --quiet $(wildcard src/*.c src/*/*.c)

@@ -1,23 +1,33 @@
 ---
+# Static analysis profile. Checks that only enforce a style we deliberately
+# do not follow (single-statement ifs without braces, ignoring printf's
+# return value, C11 Annex K "_s" functions) are disabled; everything else
+# from these groups is on.
 Checks: >
   -*,
   bugprone-*,
   -bugprone-easily-swappable-parameters,
+  -bugprone-signed-bitwise,
+  -bugprone-multi-level-implicit-pointer-conversion,
   cert-*,
+  -cert-err33-c,
   clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   concurrency-*,
   misc-*,
   -misc-include-cleaner,
   performance-*,
   portability-*,
   readability-*,
+  -readability-braces-around-statements,
   -readability-identifier-length,
   -readability-magic-numbers,
-  -readability-function-cognitive-complexity
-WarningsAsErrors: ''
+  -readability-function-cognitive-complexity,
+  -readability-uppercase-literal-suffix,
+  -readability-trailing-comma,
+  -readability-implicit-bool-conversion,
+  -readability-math-missing-parentheses
+WarningsAsErrors: '*'
 HeaderFilterRegex: '(src|include)/.*'
 FormatStyle: file
-CheckOptions:
-  - key: readability-braces-around-statements.ShortStatementLines
-    value: '1'
 ...
