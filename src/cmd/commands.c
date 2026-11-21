@@ -34,9 +34,20 @@ static void print_error(const char *fmt, ...)
     va_end(args);
 }
 
-static const char *describe(tw_status status, int err_no)
+/* Describes a failure. Uses the thread-safe XSI strerror_r for errno values. */
+static const char *describe(tw_status status, int err_no, char *buf, size_t buf_size)
 {
-    return (status == TW_ERR_IO && err_no != 0) ? strerror(err_no) : tw_status_str(status);
+    if (status != TW_ERR_IO || err_no == 0)
+        return tw_status_str(status);
+    if (strerror_r(err_no, buf, buf_size) != 0)
+        return tw_status_str(status);
+    return buf;
+}
+
+/* "1 line", "2 lines" */
+static const char *plural(size_t n)
+{
+    return n == 1 ? "" : "s";
 }
 
 static bool session_is_dirty(tw_app *app)
@@ -62,7 +73,8 @@ void tw_command_open(tw_app *app, const char *path, bool force)
     int err_no = 0;
     tw_status status = tw_file_load(path, &doc, &err_no);
     if (status != TW_OK) {
-        print_error("cannot open '%s': %s", path, describe(status, err_no));
+        char reason[128];
+        print_error("cannot open '%s': %s", path, describe(status, err_no, reason, sizeof reason));
         return;
     }
 
@@ -83,7 +95,7 @@ void tw_command_open(tw_app *app, const char *path, bool force)
         print_error("cannot open '%s': %s", path, tw_status_str(status));
         return;
     }
-    printf("Opened '%s' (%zu lines).\n", path, lines);
+    printf("Opened '%s' (%zu line%s).\n", path, lines, plural(lines));
 }
 
 static void cmd_open(tw_app *app, const char *arg, bool force)
@@ -144,11 +156,12 @@ static void cmd_save(tw_app *app, const char *arg, bool force)
     pthread_mutex_unlock(&app->session.lock);
 
     if (status != TW_OK) {
+        char reason[128];
         print_error("cannot save '%s': %s", *arg != '\0' ? arg : "the current file",
-                    describe(status, err_no));
+                    describe(status, err_no, reason, sizeof reason));
         return;
     }
-    printf("Saved %zu lines.\n", lines);
+    printf("Saved %zu line%s.\n", lines, plural(lines));
 }
 
 static bool take_snapshot(tw_app *app, tw_document *snapshot)
@@ -227,7 +240,8 @@ static void cmd_analyze(tw_app *app, const char *arg, bool force)
         print_error("cannot start the analysis: %s", tw_status_str(status));
         return;
     }
-    printf("Analysing %zu lines in the background. Use 'status' or 'cancel'.\n", lines);
+    printf("Analysing %zu line%s in the background. Use 'status' or 'cancel'.\n", lines,
+           plural(lines));
 }
 
 static void cmd_cancel(tw_app *app, const char *arg, bool force)
@@ -375,20 +389,25 @@ static tw_cmd_result request_quit(tw_app *app, bool force)
     return TW_CMD_CONTINUE;
 }
 
-tw_cmd_result tw_command_execute(tw_app *app, char *line)
+static bool is_blank(char c)
+{
+    return c == ' ' || c == '\t';
+}
+
+bool tw_command_parse(char *line, tw_parsed_command *out)
 {
     char *name = line;
-    while (*name == ' ' || *name == '\t')
+    while (is_blank(*name))
         name++;
     if (*name == '\0')
-        return TW_CMD_CONTINUE;
+        return false;
 
     char *arg = name;
-    while (*arg != '\0' && *arg != ' ' && *arg != '\t')
+    while (*arg != '\0' && !is_blank(*arg))
         arg++;
     if (*arg != '\0')
         *arg++ = '\0';
-    while (*arg == ' ' || *arg == '\t')
+    while (is_blank(*arg))
         arg++;
 
     bool force = false;
@@ -398,9 +417,22 @@ tw_cmd_result tw_command_execute(tw_app *app, char *line)
         force = true;
     }
 
-    const command_spec *spec = find_command(name);
-    if (spec == NULL || (force && !spec->forceable)) {
-        print_error("unknown command '%s%s'. Type 'help' for the list.", name, force ? "!" : "");
+    out->name = name;
+    out->arg = arg;
+    out->force = force;
+    return true;
+}
+
+tw_cmd_result tw_command_execute(tw_app *app, char *line)
+{
+    tw_parsed_command cmd;
+    if (!tw_command_parse(line, &cmd))
+        return TW_CMD_CONTINUE;
+
+    const command_spec *spec = find_command(cmd.name);
+    if (spec == NULL || (cmd.force && !spec->forceable)) {
+        print_error("unknown command '%s%s'. Type 'help' for the list.", cmd.name,
+                    cmd.force ? "!" : "");
         return TW_CMD_CONTINUE;
     }
 
@@ -408,12 +440,12 @@ tw_cmd_result tw_command_execute(tw_app *app, char *line)
     if (!quitting)
         app->quit_armed = false;
 
-    if (!validate_args(spec, arg))
+    if (!validate_args(spec, cmd.arg))
         return TW_CMD_CONTINUE;
 
     if (quitting)
-        return request_quit(app, force);
+        return request_quit(app, cmd.force);
 
-    spec->run(app, arg, force);
+    spec->run(app, cmd.arg, cmd.force);
     return TW_CMD_CONTINUE;
 }

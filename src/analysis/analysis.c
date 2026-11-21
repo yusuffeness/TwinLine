@@ -71,7 +71,7 @@ static void free_entries(line_entry *entries, size_t count)
 static tw_status build_entries(const tw_document *doc, tw_fold_mode fold, atomic_bool *cancel,
                                line_entry **out_entries, size_t *out_count, size_t *word_count)
 {
-    line_entry *entries = malloc((doc->count ? doc->count : 1) * sizeof *entries);
+    line_entry *entries = calloc(doc->count ? doc->count : 1, sizeof *entries);
     if (entries == NULL)
         return TW_ERR_NOMEM;
 

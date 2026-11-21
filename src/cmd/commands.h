@@ -15,6 +15,20 @@ typedef enum tw_cmd_result {
     TW_CMD_QUIT,
 } tw_cmd_result;
 
+/* A command line split into its parts. Pointers refer into the input line. */
+typedef struct tw_parsed_command {
+    char *name; /* command name without the trailing '!' */
+    char *arg;  /* rest of the line, leading blanks removed; may be "" */
+    bool force; /* the name ended with '!' */
+} tw_parsed_command;
+
+/*
+ * Splits `line` in place into name, argument and force flag. Returns false
+ * for a blank line. Never fails otherwise; unknown names are reported by
+ * tw_command_execute().
+ */
+bool tw_command_parse(char *line, tw_parsed_command *out);
+
 /* Parses and runs one command line. `line` is modified in place. */
 tw_cmd_result tw_command_execute(tw_app *app, char *line);
 

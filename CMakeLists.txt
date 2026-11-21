@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
   TwinLine
-  VERSION 0.2.0
+  VERSION 0.3.0
   DESCRIPTION "A concurrent terminal editor that finds the lines that look alike"
   HOMEPAGE_URL "https://github.com/yusuffeness/TwinLine"
   LANGUAGES C)
@@ -27,6 +27,9 @@ option(TWINLINE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 option(TWINLINE_ENABLE_ASAN "Build with AddressSanitizer" OFF)
 option(TWINLINE_ENABLE_UBSAN "Build with UndefinedBehaviorSanitizer" OFF)
 option(TWINLINE_ENABLE_TSAN "Build with ThreadSanitizer" OFF)
+option(TWINLINE_ENABLE_COVERAGE "Instrument the build for code coverage" OFF)
+option(TWINLINE_BUILD_TESTS "Build the unit, integration and fuzz regression tests" ON)
+option(TWINLINE_BUILD_FUZZERS "Build the fuzz targets with libFuzzer (Clang only)" OFF)
 
 if(TWINLINE_ENABLE_TSAN AND TWINLINE_ENABLE_ASAN)
   message(FATAL_ERROR "ThreadSanitizer and AddressSanitizer cannot be enabled together")
@@ -78,6 +81,20 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_link_options(twinline_options INTERFACE -fsanitize=${_tw_sanitizer_list})
     message(STATUS "TwinLine: sanitizers enabled: ${_tw_sanitizer_list}")
   endif()
+
+  if(TWINLINE_ENABLE_COVERAGE)
+    target_compile_options(twinline_options INTERFACE --coverage -O0 -g)
+    target_link_options(twinline_options INTERFACE --coverage)
+    message(STATUS "TwinLine: coverage instrumentation enabled")
+  endif()
+endif()
+
+if(TWINLINE_BUILD_FUZZERS)
+  if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "TWINLINE_BUILD_FUZZERS requires Clang (libFuzzer)")
+  endif()
+  # Instrument the library too, so the fuzzer gets coverage feedback from it.
+  target_compile_options(twinline_options INTERFACE -fsanitize=fuzzer-no-link)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -114,6 +131,14 @@ target_link_libraries(twinline_core PUBLIC twinline_options Threads::Threads)
 # ---------------------------------------------------------------------------
 add_executable(twinline src/main.c)
 target_link_libraries(twinline PRIVATE twinline_core)
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+if(TWINLINE_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
 
 # ---------------------------------------------------------------------------
 # Install

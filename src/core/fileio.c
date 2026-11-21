@@ -43,11 +43,11 @@ tw_status tw_file_load(const char *path, tw_document *out, int *err_no)
 
     errno = 0;
     for (;;) {
-        ssize_t read = getline(&buf, &buf_cap, file);
-        if (read < 0)
+        ssize_t nread = getline(&buf, &buf_cap, file);
+        if (nread < 0)
             break;
 
-        size_t len = (size_t)read;
+        size_t len = (size_t)nread;
         strip_line_ending(buf, &len);
 
         const char *start = buf;
@@ -110,7 +110,9 @@ tw_status tw_file_save(const char *path, const tw_document *doc, int *err_no)
     /* mkstemp creates the file with mode 0600; keep the original mode if the
      * target exists, otherwise use the conventional 0644. Best effort only. */
     struct stat st;
-    mode_t mode = (stat(path, &st) == 0) ? (st.st_mode & 07777) : TW_DEFAULT_MODE;
+    mode_t mode = TW_DEFAULT_MODE;
+    if (stat(path, &st) == 0)
+        mode = (mode_t)(st.st_mode & 07777);
     (void)fchmod(fd, mode);
 
     FILE *file = fdopen(fd, "w");
