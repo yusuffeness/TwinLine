@@ -1,0 +1,2 @@
+add_executable(bench_analysis bench_analysis.c)
+target_link_libraries(bench_analysis PRIVATE twinline_core)

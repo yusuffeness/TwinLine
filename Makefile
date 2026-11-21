@@ -11,7 +11,7 @@ SOURCES     := $(shell find src include tests bench -name '*.[ch]' 2>/dev/null)
 
 .DEFAULT_GOAL := build
 
-.PHONY: help build debug release test asan tsan coverage run install corpus clean format format-check tidy
+.PHONY: help build debug release test asan tsan coverage bench bench-large run install corpus clean format format-check tidy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -47,6 +47,19 @@ coverage: ## Coverage build, run the tests and print a gcovr summary
 	find build-coverage -name '*.gcda' -delete
 	ctest --test-dir build-coverage --output-on-failure --parallel $(JOBS)
 	gcovr --root . --object-directory build-coverage --filter src/ --print-summary
+
+bench: release ## Benchmark 1 MiB (both modes, 1..N threads) and draw docs/assets/benchmark.png
+	$(MAKE) corpus CORPUS_SIZE=1MiB
+	@mkdir -p bench/results
+	./$(BUILD_DIR)/bench/bench_analysis --repeat=3 --csv=bench/results/benchmark.csv \
+		corpus/corpus-1MiB.txt
+	$(PYTHON) bench/plot.py bench/results/benchmark.csv -o docs/assets/benchmark.png
+
+bench-large: release ## Benchmark a 10 MiB corpus (pruned mode only; takes a few minutes)
+	$(MAKE) corpus CORPUS_SIZE=10MiB
+	@mkdir -p bench/results
+	./$(BUILD_DIR)/bench/bench_analysis --repeat=1 --modes=pruned \
+		--csv=bench/results/benchmark-10MiB.csv corpus/corpus-10MiB.txt
 
 run: build ## Build and run twinline
 	./$(BUILD_DIR)/twinline

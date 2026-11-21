@@ -191,3 +191,50 @@ jobs:
         with:
           name: fuzz-crash-${{ matrix.target }}
           path: artifacts/
+
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (Release)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DTWINLINE_BUILD_TESTS=OFF
+          cmake --build build --parallel
+
+      - name: Generate the 1 MiB corpus
+        run: python3 scripts/gen_corpus.py --size 1MiB --output corpus/corpus-1MiB.txt
+
+      - name: Run the benchmark
+        run: |
+          ./build/bench/bench_analysis --repeat=3 --threads=1,2,4 \
+            --json=benchmark.json corpus/corpus-1MiB.txt | tee benchmark.txt
+          { echo '```'; cat benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Results of the last run on main are kept in the Actions cache and
+      # compared with this run; a slowdown beyond the threshold is reported.
+      - name: Restore previous results
+        uses: actions/cache/restore@v4
+        with:
+          path: ./benchmark-history
+          key: benchmark-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: benchmark-${{ runner.os }}-
+
+      - name: Compare with previous results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: TwinLine analysis
+          tool: customSmallerIsBetter
+          output-file-path: benchmark.json
+          external-data-json-path: ./benchmark-history/data.json
+          alert-threshold: "130%"
+          fail-on-alert: false
+          summary-always: true
+
+      - name: Save results
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ./benchmark-history
+          key: benchmark-${{ runner.os }}-${{ github.run_id }}
