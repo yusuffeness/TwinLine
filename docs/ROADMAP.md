@@ -37,14 +37,14 @@ and leaves the repository in a working, presentable state.
 
 ## Milestone 2 - Tests and CI (v0.3.0)
 
-- [ ] Unit tests for the tokenizer, UTF-8, Jaccard, document and file I/O
-- [ ] Integration tests with golden files
-- [ ] GitHub Actions: GCC and Clang on Ubuntu and macOS
-- [ ] AddressSanitizer, UBSan, ThreadSanitizer and Valgrind jobs
-- [ ] clang-format and clang-tidy checks
-- [ ] Coverage reporting
-- [ ] Fuzz targets for the command parser and UTF-8 decoder
-- [ ] CodeQL
+- [x] Unit tests for the tokenizer, UTF-8, Jaccard, document and file I/O
+- [x] Integration tests with golden files
+- [x] GitHub Actions: GCC and Clang on Ubuntu and macOS
+- [x] AddressSanitizer, UBSan, ThreadSanitizer and Valgrind jobs
+- [x] clang-format and clang-tidy checks
+- [x] Coverage reporting
+- [x] Fuzz targets for the command parser and UTF-8 decoder
+- [x] CodeQL
 
 ## Milestone 3 - Parallel analysis (v0.4.0)
 

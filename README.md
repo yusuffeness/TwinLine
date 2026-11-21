@@ -4,8 +4,10 @@
 
 **A concurrent terminal editor that finds the lines that look alike.**
 
+[![CI](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml/badge.svg)](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/yusuffeness/TwinLine/graph/badge.svg)](https://codecov.io/gh/yusuffeness/TwinLine)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Version](https://img.shields.io/badge/version-0.2.0-blueviolet)
+![Version](https://img.shields.io/badge/version-0.3.0-blueviolet)
 ![Language](https://img.shields.io/badge/language-C17-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -37,7 +39,7 @@ make corpus                # generate a 1 MiB test corpus in corpus/
 ```
 
 ```text
-TwinLine 0.2.0 - type 'help' for the list of commands.
+TwinLine 0.3.0 - type 'help' for the list of commands.
 Opened 'corpus/corpus-1MiB.txt' (16357 lines).
 twinline> analyze
 Analysing 16357 lines in the background. Use 'status' or 'cancel'.
@@ -112,12 +114,21 @@ Useful targets:
 | Command        | What it does                                      |
 | -------------- | ------------------------------------------------- |
 | `make`         | Release build in `build/`                         |
+| `make test`    | Build and run every test                          |
 | `make debug`   | Debug build in `build-debug/`                     |
-| `make asan`    | Build with AddressSanitizer and UBSan             |
-| `make tsan`    | Build with ThreadSanitizer                        |
+| `make asan`    | Run the tests with AddressSanitizer and UBSan     |
+| `make tsan`    | Run the tests with ThreadSanitizer                |
+| `make coverage`| Coverage report with gcovr                        |
 | `make corpus`  | Generate a test corpus (`CORPUS_SIZE=10MiB`)      |
 | `make format`  | Format the sources with clang-format              |
 | `make help`    | List every target                                 |
+
+## Testing
+
+Every change is checked by unit tests, golden-file integration tests and
+fuzz targets, and by GitHub Actions on Linux and macOS with GCC and Clang,
+AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer, Valgrind,
+clang-tidy and coverage reporting. See [docs/TESTING.md](docs/TESTING.md).
 
 ## Project layout
 
