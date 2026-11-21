@@ -1,0 +1,38 @@
+# Build output
+/build*/
+/out/
+/cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# Generated test data (create it with: make corpus)
+/corpus/
+
+# Runtime files
+*.twinline.swp
+.twinline.swp
+
+# Coverage, profiling and fuzzing artefacts
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+/coverage/
+crash-*
+leak-*
+timeout-*
+oom-*
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
