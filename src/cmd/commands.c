@@ -5,6 +5,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cmd/report.h"
@@ -20,17 +21,17 @@
 /* Helpers                                                                   */
 /* ------------------------------------------------------------------------ */
 
-static void print_error(const char *fmt, ...) TW_PRINTF_LIKE(1, 2);
+static void print_error(tw_app *app, const char *fmt, ...) TW_PRINTF_LIKE(2, 3);
 
-static void print_error(const char *fmt, ...)
+static void print_error(tw_app *app, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    flockfile(stderr);
-    fputs("error: ", stderr);
-    vfprintf(stderr, fmt, args);
-    fputc('\n', stderr);
-    funlockfile(stderr);
+    flockfile(app->err);
+    fputs("error: ", app->err);
+    vfprintf(app->err, fmt, args);
+    fputc('\n', app->err);
+    funlockfile(app->err);
     va_end(args);
 }
 
@@ -65,7 +66,8 @@ static bool session_is_dirty(tw_app *app)
 void tw_command_open(tw_app *app, const char *path, bool force)
 {
     if (!force && session_is_dirty(app)) {
-        print_error("unsaved changes. Save them first, or use 'open! %s' to discard them.", path);
+        print_error(app, "unsaved changes. Save them first, or use 'open! %s' to discard them.",
+                    path);
         return;
     }
 
@@ -74,7 +76,8 @@ void tw_command_open(tw_app *app, const char *path, bool force)
     tw_status status = tw_file_load(path, &doc, &err_no);
     if (status != TW_OK) {
         char reason[128];
-        print_error("cannot open '%s': %s", path, describe(status, err_no, reason, sizeof reason));
+        print_error(app, "cannot open '%s': %s", path,
+                    describe(status, err_no, reason, sizeof reason));
         return;
     }
 
@@ -92,10 +95,10 @@ void tw_command_open(tw_app *app, const char *path, bool force)
     tw_document_free(&doc);
 
     if (status != TW_OK) {
-        print_error("cannot open '%s': %s", path, tw_status_str(status));
+        print_error(app, "cannot open '%s': %s", path, tw_status_str(status));
         return;
     }
-    printf("Opened '%s' (%zu line%s).\n", path, lines, plural(lines));
+    fprintf(app->out, "Opened '%s' (%zu line%s).\n", path, lines, plural(lines));
 }
 
 static void cmd_open(tw_app *app, const char *arg, bool force)
@@ -114,10 +117,10 @@ static void cmd_append(tw_app *app, const char *arg, bool force)
     pthread_mutex_unlock(&app->session.lock);
 
     if (status != TW_OK) {
-        print_error("cannot append line: %s", tw_status_str(status));
+        print_error(app, "cannot append line: %s", tw_status_str(status));
         return;
     }
-    printf("Line %zu added.\n", lines);
+    fprintf(app->out, "Line %zu added.\n", lines);
 }
 
 static void cmd_show(tw_app *app, const char *arg, bool force)
@@ -125,12 +128,12 @@ static void cmd_show(tw_app *app, const char *arg, bool force)
     (void)arg;
     (void)force;
     pthread_mutex_lock(&app->session.lock);
-    flockfile(stdout);
+    flockfile(app->out);
     if (app->session.doc.count == 0)
-        puts("(empty document)");
+        fprintf(app->out, "%s\n", "(empty document)");
     for (size_t i = 0; i < app->session.doc.count; i++)
-        printf("%6zu  %s\n", i + 1, app->session.doc.lines[i]);
-    funlockfile(stdout);
+        fprintf(app->out, "%6zu  %s\n", i + 1, app->session.doc.lines[i]);
+    funlockfile(app->out);
     pthread_mutex_unlock(&app->session.lock);
 }
 
@@ -142,7 +145,7 @@ static void cmd_save(tw_app *app, const char *arg, bool force)
     const char *path = (*arg != '\0') ? arg : app->session.path;
     if (path == NULL) {
         pthread_mutex_unlock(&app->session.lock);
-        print_error("no file name. Usage: save FILE");
+        print_error(app, "no file name. Usage: save FILE");
         return;
     }
 
@@ -157,23 +160,23 @@ static void cmd_save(tw_app *app, const char *arg, bool force)
 
     if (status != TW_OK) {
         char reason[128];
-        print_error("cannot save '%s': %s", *arg != '\0' ? arg : "the current file",
+        print_error(app, "cannot save '%s': %s", *arg != '\0' ? arg : "the current file",
                     describe(status, err_no, reason, sizeof reason));
         return;
     }
-    printf("Saved %zu line%s.\n", lines, plural(lines));
+    fprintf(app->out, "Saved %zu line%s.\n", lines, plural(lines));
 }
 
 static bool take_snapshot(tw_app *app, tw_document *snapshot)
 {
     tw_status status = tw_session_snapshot(&app->session, snapshot);
     if (status != TW_OK) {
-        print_error("cannot copy the document: %s", tw_status_str(status));
+        print_error(app, "cannot copy the document: %s", tw_status_str(status));
         return false;
     }
     if (snapshot->count == 0) {
         tw_document_free(snapshot);
-        print_error("the document is empty. Use 'open' or 'append' first.");
+        print_error(app, "the document is empty. Use 'open' or 'append' first.");
         return false;
     }
     return true;
@@ -192,29 +195,34 @@ static void cmd_analyze_sync(tw_app *app, const char *arg, bool force)
     tw_document_free(&snapshot);
 
     if (status != TW_OK) {
-        print_error("analysis failed: %s", tw_status_str(status));
+        print_error(app, "analysis failed: %s", tw_status_str(status));
         return;
     }
-    tw_report_print(stdout, "Analysis finished:", &result);
+    tw_report_print(app->out, "Analysis finished:", &result);
 }
 
-/* Runs on the worker thread. */
+/* Runs on the worker thread: formats the outcome and hands it to the front end. */
 static void on_background_done(tw_status status, const tw_analysis_result *result, void *user)
 {
     tw_app *app = user;
+    char *text = NULL;
+    size_t len = 0;
+    FILE *buf = open_memstream(&text, &len);
+    if (buf == NULL) {
+        app->emit(app, "Background analysis finished (no memory for the report).\n", true);
+        return;
+    }
 
-    flockfile(stdout);
-    fputc('\n', stdout);
     if (status == TW_OK)
-        tw_report_print(stdout, "Background analysis finished:", result);
+        tw_report_print(buf, "Background analysis finished:", result);
     else if (status == TW_ERR_CANCELLED)
-        puts("Background analysis cancelled.");
+        fputs("Background analysis cancelled.\n", buf);
     else
-        printf("Background analysis failed: %s\n", tw_status_str(status));
-    if (!atomic_load(&app->quitting))
-        fputs(TW_PROMPT, stdout);
-    fflush(stdout);
-    funlockfile(stdout);
+        fprintf(buf, "Background analysis failed: %s\n", tw_status_str(status));
+    fclose(buf);
+
+    app->emit(app, text, status != TW_OK && status != TW_ERR_CANCELLED);
+    free(text);
 }
 
 static void cmd_analyze(tw_app *app, const char *arg, bool force)
@@ -222,11 +230,11 @@ static void cmd_analyze(tw_app *app, const char *arg, bool force)
     (void)arg;
     (void)force;
     if (tw_job_is_cancelling(&app->job)) {
-        print_error("the previous analysis is still stopping. Try again in a moment.");
+        print_error(app, "the previous analysis is still stopping. Try again in a moment.");
         return;
     }
     if (tw_job_is_running(&app->job)) {
-        print_error("an analysis is already running. Use 'cancel' to stop it.");
+        print_error(app, "an analysis is already running. Use 'cancel' to stop it.");
         return;
     }
 
@@ -237,11 +245,11 @@ static void cmd_analyze(tw_app *app, const char *arg, bool force)
 
     tw_status status = tw_job_start(&app->job, &snapshot, &app->options, on_background_done, app);
     if (status != TW_OK) {
-        print_error("cannot start the analysis: %s", tw_status_str(status));
+        print_error(app, "cannot start the analysis: %s", tw_status_str(status));
         return;
     }
-    printf("Analysing %zu line%s in the background. Use 'status' or 'cancel'.\n", lines,
-           plural(lines));
+    fprintf(app->out, "Analysing %zu line%s in the background. Use 'status' or 'cancel'.\n", lines,
+            plural(lines));
 }
 
 static void cmd_cancel(tw_app *app, const char *arg, bool force)
@@ -249,11 +257,11 @@ static void cmd_cancel(tw_app *app, const char *arg, bool force)
     (void)arg;
     (void)force;
     if (!tw_job_is_running(&app->job)) {
-        puts("No analysis is running.");
+        fprintf(app->out, "%s\n", "No analysis is running.");
         return;
     }
     tw_job_cancel(&app->job);
-    puts("Cancelling the background analysis...");
+    fprintf(app->out, "%s\n", "Cancelling the background analysis...");
 }
 
 static void cmd_status(tw_app *app, const char *arg, bool force)
@@ -262,28 +270,29 @@ static void cmd_status(tw_app *app, const char *arg, bool force)
     (void)force;
     pthread_mutex_lock(&app->session.lock);
     const char *path = app->session.path ? app->session.path : "(no file)";
-    printf("File     : %s\n", path);
-    printf("Lines    : %zu\n", app->session.doc.count);
-    printf("Modified : %s\n", app->session.dirty ? "yes" : "no");
+    fprintf(app->out, "File     : %s\n", path);
+    fprintf(app->out, "Lines    : %zu\n", app->session.doc.count);
+    fprintf(app->out, "Modified : %s\n", app->session.dirty ? "yes" : "no");
     pthread_mutex_unlock(&app->session.lock);
 
-    printf("Folding  : %s\n", app->options.fold == TW_FOLD_TURKISH ? "turkish" : "default");
+    fprintf(app->out, "Folding  : %s\n",
+            app->options.fold == TW_FOLD_TURKISH ? "turkish" : "default");
     size_t threads = tw_analysis_thread_count(&app->options);
-    printf("Threads  : %zu%s\n", threads, app->options.threads == 0 ? " (one per processor)" : "");
-    printf("Mode     : %s\n", app->options.exhaustive ? "exhaustive" : "pruned");
+    fprintf(app->out, "Threads  : %zu%s\n", threads,
+            app->options.threads == 0 ? " (one per processor)" : "");
+    fprintf(app->out, "Mode     : %s\n", app->options.exhaustive ? "exhaustive" : "pruned");
     if (tw_job_is_running(&app->job))
-        printf("Analysis : running, %.0f%% done\n",
-               100.0 * tw_analysis_progress_fraction(&app->job.progress));
+        fprintf(app->out, "Analysis : running, %.0f%% done\n",
+                100.0 * tw_analysis_progress_fraction(&app->job.progress));
     else
-        puts("Analysis : idle");
+        fprintf(app->out, "%s\n", "Analysis : idle");
 }
 
 static void cmd_help(tw_app *app, const char *arg, bool force)
 {
-    (void)app;
     (void)arg;
     (void)force;
-    tw_command_print_help();
+    tw_command_print_help(app->out);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -300,46 +309,67 @@ typedef enum arg_kind {
 typedef void (*command_fn)(tw_app *app, const char *arg, bool force);
 
 typedef struct command_spec {
-    const char *name;
-    const char *usage;
-    const char *summary;
+    tw_command_info info;
     arg_kind args;
     bool forceable; /* accepts a trailing '!' */
     command_fn run; /* NULL for quit/exit, handled by the dispatcher */
 } command_spec;
 
 static const command_spec COMMANDS[] = {
-    {"open", "open[!] FILE", "Load FILE (use open! to discard unsaved changes)", ARGS_FILE, true,
+    {{"open", "open[!] FILE", "Load FILE (use open! to discard unsaved changes)", true},
+     ARGS_FILE,
+     true,
      cmd_open},
-    {"append", "append TEXT", "Add TEXT as a new last line", ARGS_TEXT, false, cmd_append},
-    {"show", "show", "Print the document with line numbers", ARGS_NONE, false, cmd_show},
-    {"save", "save [FILE]", "Save atomically to FILE or to the current file", ARGS_OPTIONAL_FILE,
-     false, cmd_save},
-    {"analyze", "analyze", "Find near-duplicate lines in the background", ARGS_NONE, false,
+    {{"append", "append TEXT", "Add TEXT as a new last line", false}, ARGS_TEXT, false, cmd_append},
+    {{"show", "show", "Print the document with line numbers", false}, ARGS_NONE, false, cmd_show},
+    {{"save", "save [FILE]", "Save atomically to FILE or to the current file", true},
+     ARGS_OPTIONAL_FILE,
+     false,
+     cmd_save},
+    {{"analyze", "analyze", "Find near-duplicate lines in the background", false},
+     ARGS_NONE,
+     false,
      cmd_analyze},
-    {"analyze-sync", "analyze-sync", "Find near-duplicate lines and wait for the result", ARGS_NONE,
-     false, cmd_analyze_sync},
-    {"cancel", "cancel", "Stop the running background analysis", ARGS_NONE, false, cmd_cancel},
-    {"status", "status", "Show the file, unsaved changes and analysis progress", ARGS_NONE, false,
+    {{"analyze-sync", "analyze-sync", "Find near-duplicate lines and wait for the result", false},
+     ARGS_NONE,
+     false,
+     cmd_analyze_sync},
+    {{"cancel", "cancel", "Stop the running background analysis", false},
+     ARGS_NONE,
+     false,
+     cmd_cancel},
+    {{"status", "status", "Show the file, unsaved changes and analysis progress", false},
+     ARGS_NONE,
+     false,
      cmd_status},
-    {"help", "help", "Show this list", ARGS_NONE, false, cmd_help},
-    {"quit", "quit[!]", "Exit (quit! discards unsaved changes)", ARGS_NONE, true, NULL},
-    {"exit", "exit[!]", "Same as quit", ARGS_NONE, true, NULL},
+    {{"help", "help", "Show this list", false}, ARGS_NONE, false, cmd_help},
+    {{"quit", "quit[!]", "Exit (quit! discards unsaved changes)", false}, ARGS_NONE, true, NULL},
+    {{"exit", "exit[!]", "Same as quit", false}, ARGS_NONE, true, NULL},
 };
 
 #define COMMAND_COUNT (sizeof COMMANDS / sizeof COMMANDS[0])
 
-void tw_command_print_help(void)
+void tw_command_print_help(FILE *out)
 {
-    puts("Commands:");
+    fputs("Commands:\n", out);
     for (size_t i = 0; i < COMMAND_COUNT; i++)
-        printf("  %-16s %s\n", COMMANDS[i].usage, COMMANDS[i].summary);
+        fprintf(out, "  %-16s %s\n", COMMANDS[i].info.usage, COMMANDS[i].info.summary);
+}
+
+size_t tw_command_count(void)
+{
+    return COMMAND_COUNT;
+}
+
+const tw_command_info *tw_command_at(size_t index)
+{
+    return index < COMMAND_COUNT ? &COMMANDS[index].info : NULL;
 }
 
 static const command_spec *find_command(const char *name)
 {
     for (size_t i = 0; i < COMMAND_COUNT; i++) {
-        if (strcmp(COMMANDS[i].name, name) == 0)
+        if (strcmp(COMMANDS[i].info.name, name) == 0)
             return &COMMANDS[i];
     }
     return NULL;
@@ -352,7 +382,7 @@ static void trim_trailing_space(char *s)
         s[--len] = '\0';
 }
 
-static bool validate_args(const command_spec *spec, char *arg)
+static bool validate_args(tw_app *app, const command_spec *spec, char *arg)
 {
     if (spec->args != ARGS_TEXT)
         trim_trailing_space(arg);
@@ -360,19 +390,19 @@ static bool validate_args(const command_spec *spec, char *arg)
     switch (spec->args) {
     case ARGS_NONE:
         if (*arg != '\0') {
-            print_error("'%s' takes no arguments.", spec->name);
+            print_error(app, "'%s' takes no arguments.", spec->info.name);
             return false;
         }
         return true;
     case ARGS_FILE:
         if (*arg == '\0') {
-            print_error("usage: %s", spec->usage);
+            print_error(app, "usage: %s", spec->info.usage);
             return false;
         }
         /* fall through */
     case ARGS_OPTIONAL_FILE:
         if (strpbrk(arg, " \t") != NULL) {
-            print_error("file names with spaces are not supported yet.");
+            print_error(app, "file names with spaces are not supported yet.");
             return false;
         }
         return true;
@@ -388,7 +418,9 @@ static tw_cmd_result request_quit(tw_app *app, bool force)
         return TW_CMD_QUIT;
 
     app->quit_armed = true;
-    puts("You have unsaved changes. Type 'quit' again to discard them, or 'save' first.");
+    fputs("warning: you have unsaved changes. Type 'quit' again to discard them, or 'save' "
+          "first.\n",
+          app->err);
     return TW_CMD_CONTINUE;
 }
 
@@ -434,7 +466,7 @@ tw_cmd_result tw_command_execute(tw_app *app, char *line)
 
     const command_spec *spec = find_command(cmd.name);
     if (spec == NULL || (cmd.force && !spec->forceable)) {
-        print_error("unknown command '%s%s'. Type 'help' for the list.", cmd.name,
+        print_error(app, "unknown command '%s%s'. Type 'help' for the list.", cmd.name,
                     cmd.force ? "!" : "");
         return TW_CMD_CONTINUE;
     }
@@ -443,7 +475,7 @@ tw_cmd_result tw_command_execute(tw_app *app, char *line)
     if (!quitting)
         app->quit_armed = false;
 
-    if (!validate_args(spec, cmd.arg))
+    if (!validate_args(app, spec, cmd.arg))
         return TW_CMD_CONTINUE;
 
     if (quitting)

@@ -7,6 +7,8 @@
 #define TWINLINE_CMD_COMMANDS_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
 
 #include "cmd/app.h"
 
@@ -36,6 +38,17 @@ tw_cmd_result tw_command_execute(tw_app *app, char *line);
 void tw_command_open(tw_app *app, const char *path, bool force);
 
 /* Prints the command reference. */
-void tw_command_print_help(void);
+void tw_command_print_help(FILE *out);
+
+/* Read-only view of the command table, for menus and completion. */
+typedef struct tw_command_info {
+    const char *name;
+    const char *usage;
+    const char *summary;
+    bool takes_file; /* the argument is a file name */
+} tw_command_info;
+
+size_t tw_command_count(void);
+const tw_command_info *tw_command_at(size_t index);
 
 #endif /* TWINLINE_CMD_COMMANDS_H */

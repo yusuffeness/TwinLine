@@ -1,1 +1,3 @@
 error: unsaved changes. Save them first, or use 'open! other.txt' to discard them.
+warning: you have unsaved changes. Type 'quit' again to discard them, or 'save' first.
+warning: you have unsaved changes. Type 'quit' again to discard them, or 'save' first.
