@@ -164,3 +164,34 @@ size_t tw_utf8_prefix_len(const char *s, size_t max_bytes)
         cut--;
     return cut;
 }
+
+int tw_utf8_width(uint32_t cp)
+{
+    if (cp < 0x20 || (cp >= 0x7F && cp < 0xA0))
+        return 0; /* control characters */
+    if ((cp >= 0x0300 && cp <= 0x036F) || (cp >= 0x1AB0 && cp <= 0x1AFF) ||
+        (cp >= 0x1DC0 && cp <= 0x1DFF) || (cp >= 0x20D0 && cp <= 0x20FF) ||
+        (cp >= 0xFE20 && cp <= 0xFE2F) || cp == 0x200B || cp == 0x200D || cp == 0xFE0F)
+        return 0; /* combining marks, zero-width space and joiner, emoji selector */
+    if ((cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0x303E) ||
+        (cp >= 0x3041 && cp <= 0x33FF) || (cp >= 0x3400 && cp <= 0x4DBF) ||
+        (cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0xA000 && cp <= 0xA4CF) ||
+        (cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0xF900 && cp <= 0xFAFF) ||
+        (cp >= 0xFE30 && cp <= 0xFE4F) || (cp >= 0xFF00 && cp <= 0xFF60) ||
+        (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1F64F) ||
+        (cp >= 0x1F900 && cp <= 0x1F9FF) || (cp >= 0x20000 && cp <= 0x3FFFD))
+        return 2;
+    return 1;
+}
+
+size_t tw_utf8_str_width(const char *s)
+{
+    const unsigned char *p = (const unsigned char *)s;
+    size_t width = 0;
+    while (*p != '\0') {
+        uint32_t cp;
+        p += tw_utf8_decode(p, &cp);
+        width += (size_t)tw_utf8_width(cp);
+    }
+    return width;
+}

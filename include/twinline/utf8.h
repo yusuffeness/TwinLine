@@ -42,6 +42,13 @@ uint32_t tw_utf8_fold(uint32_t cp, tw_fold_mode mode);
  * Punctuation, symbols, spaces and emoji are separators. */
 bool tw_utf8_is_word(uint32_t cp);
 
+/* Number of terminal columns `cp` occupies: 0 for combining marks and
+ * control characters, 2 for East Asian wide characters and emoji, else 1. */
+int tw_utf8_width(uint32_t cp);
+
+/* Display width of a whole UTF-8 string in terminal columns. */
+size_t tw_utf8_str_width(const char *s);
+
 /* Length in bytes of the longest prefix of `s` that is at most `max_bytes`
  * long and does not split a multi-byte character. */
 size_t tw_utf8_prefix_len(const char *s, size_t max_bytes);
