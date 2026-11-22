@@ -1,0 +1,18 @@
+recover
+reload
+set autosave 0
+set autosave 99999
+set watch maybe
+set autosave off
+set watch off
+set
+open notes.txt
+recover
+recover discard
+recover later
+reload
+append x
+reload
+reload!
+status
+quit

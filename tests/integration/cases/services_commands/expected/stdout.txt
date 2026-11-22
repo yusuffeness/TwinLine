@@ -1,0 +1,23 @@
+TwinLine <version> - type 'help' for the list of commands.
+twinline> twinline> twinline> twinline> twinline> twinline> autosave set to off.
+twinline> watch set to off.
+twinline> threshold   0.70
+threads     auto (one per processor)
+strategy    jaccard
+exhaustive  off
+fold        default
+ngram       2
+autosave    off
+watch       off
+twinline> Opened 'notes.txt' (8 lines).
+twinline> twinline> twinline> twinline> Reloaded 'notes.txt' (8 lines). Type 'undo' to get the previous text back.
+twinline> Line 9 added.
+twinline> twinline> Reloaded 'notes.txt' (8 lines). Type 'undo' to get the previous text back.
+twinline> File     : notes.txt
+Lines    : 8
+Modified : no
+Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
+Analysis : idle
+twinline> 

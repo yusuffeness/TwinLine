@@ -41,6 +41,25 @@ typedef void (*tw_result_fn)(struct tw_app *app, const tw_analysis_result *resul
  */
 typedef void (*tw_prefill_fn)(struct tw_app *app, const char *text);
 
+/*
+ * Optional: shows a short, unimportant notice (for example "Autosaved
+ * notes.txt") without interrupting. May be called from any thread. When
+ * NULL, notices are not shown.
+ */
+typedef void (*tw_notify_fn)(struct tw_app *app, const char *text);
+
+/* Background services: autosave and file watching (cmd/services.c). */
+typedef struct tw_services {
+    pthread_t thread;
+    bool running;
+    pthread_mutex_t lock;
+    pthread_cond_t wake;
+    bool stop;            /* guarded by lock */
+    int inotify_fd;       /* -1 when not available */
+    int wake_pipe[2];     /* wakes the thread out of poll(); -1 when not used */
+    double last_autosave; /* CLOCK_MONOTONIC seconds */
+} tw_services;
+
 /* Around highlighted text in command output when tw_app.marks is set. */
 #define TW_MARK_ON  "\x1e"
 #define TW_MARK_OFF "\x1f"
@@ -51,6 +70,7 @@ typedef struct tw_app {
     tw_emit_fn emit;
     tw_result_fn on_result;
     tw_prefill_fn prefill;
+    tw_notify_fn notify;
     bool marks;         /* wrap highlights (find matches) in TW_MARK_ON / TW_MARK_OFF */
     void *ui;           /* owned by the active front end, may be NULL */
     tw_session session; /* holds the active buffer */
@@ -71,6 +91,12 @@ typedef struct tw_app {
     unsigned long long clusters_state; /* undo state of the buffer */
     tw_analysis_options clusters_options;
 
+    /* Services. Change the settings only while the services are stopped or
+     * with services.lock held. */
+    unsigned autosave_interval; /* seconds; 0 turns autosave off */
+    bool watch;                 /* report changes made to the files by other programs */
+    tw_services services;
+
     bool quit_armed;                    /* "quit" was typed once with unsaved changes */
     atomic_bool quitting;               /* suppresses the prompt redraw from the worker */
     atomic_bool sync_running;           /* analyze-sync is working */
@@ -79,6 +105,18 @@ typedef struct tw_app {
 
 tw_status tw_app_init(tw_app *app);
 void tw_app_destroy(tw_app *app);
+
+/* Starts the autosave and file-watching thread (if either is enabled). */
+void tw_app_start_services(tw_app *app);
+
+/* Stops the thread; recovery files of every buffer are removed when
+ * `clean_exit` (a normal quit) is set. */
+void tw_app_stop_services(tw_app *app, bool clean_exit);
+
+/* One pass of the services, as the thread does every second: reports files
+ * changed on disk and, when `autosave` is set (or the interval is over),
+ * writes recovery files. Exposed for tests. */
+void tw_services_tick(tw_app *app, bool autosave);
 
 /* Number of buffers with unsaved changes. Takes session.lock. */
 size_t tw_app_dirty_buffers(tw_app *app);

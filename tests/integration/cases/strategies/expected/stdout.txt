@@ -6,17 +6,21 @@ strategy    jaccard
 exhaustive  off
 fold        default
 ngram       2
+autosave    30 s
+watch       on
 twinline> strategy set to minhash.
 twinline> ngram set to 3.
 twinline> fold set to turkish.
-twinline> threads set to 2.
+twinline> threads set to 1.
 twinline> exhaustive set to on.
 twinline> threshold   0.70
-threads     2
+threads     1
 strategy    minhash
 exhaustive  on
 fold        turkish
 ngram       3
+autosave    30 s
+watch       on
 twinline> Analysis finished:
   Lines                       : 8 (8 with words)
   Words                       : 53

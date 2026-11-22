@@ -7,6 +7,7 @@
 #define TWINLINE_FILEIO_H
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "twinline/document.h"
 #include "twinline/status.h"
@@ -30,6 +31,10 @@ tw_status tw_file_load(const char *path, tw_document *out, int *err_no);
  */
 tw_status tw_file_load_ex(const char *path, tw_document *out, int *err_no, size_t mmap_threshold);
 
+/* Reads `file` (already open, for example standard input) like
+ * tw_file_load() reads a path. The stream is not closed. */
+tw_status tw_file_read(FILE *file, tw_document *out, int *err_no);
+
 /*
  * Writes `doc` to `path` atomically: the content goes to a temporary file in
  * the same directory, is flushed to disk and then renamed over `path`. If
@@ -37,5 +42,11 @@ tw_status tw_file_load_ex(const char *path, tw_document *out, int *err_no, size_
  * permissions are preserved.
  */
 tw_status tw_file_save(const char *path, const tw_document *doc, int *err_no);
+
+/* Same as tw_file_save(), with `prefix` (may be NULL) written before the
+ * lines, and with permissions `mode` (such as 0600) instead of the existing
+ * file's when `mode` is not 0. */
+tw_status tw_file_save_ex(const char *path, const char *prefix, const tw_document *doc,
+                          unsigned mode, int *err_no);
 
 #endif /* TWINLINE_FILEIO_H */

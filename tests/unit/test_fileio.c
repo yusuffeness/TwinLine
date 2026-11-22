@@ -13,6 +13,7 @@
 
 #include "../tw_test.h"
 #include "twinline/fileio.h"
+#include "twinline/recovery.h"
 
 static char temp_dir[256];
 
@@ -226,6 +227,77 @@ TW_TEST(mapped_load_small_and_empty_files)
     TW_CHECK_EQ_INT(err, ENOENT);
 }
 
+TW_TEST(read_from_a_stream)
+{
+    static const char text[] = "one\r\ntwo\n\nlast";
+    FILE *in = fmemopen((void *)text, sizeof text - 1, "r");
+    TW_CHECK(in != NULL);
+    tw_document doc;
+    int err = 0;
+    TW_CHECK_EQ_INT(tw_file_read(in, &doc, &err), TW_OK);
+    fclose(in);
+    TW_CHECK_EQ_SIZE(doc.count, 4);
+    TW_CHECK_EQ_STR(doc.lines[0], "one");
+    TW_CHECK_EQ_STR(doc.lines[2], "");
+    TW_CHECK_EQ_STR(doc.lines[3], "last");
+    tw_document_free(&doc);
+}
+
+TW_TEST(recovery_files)
+{
+    char *swap = tw_recovery_path("dir/sub/notes.txt");
+    TW_CHECK_EQ_STR(swap, "dir/sub/.notes.txt.twinline.swp");
+    free(swap);
+    swap = tw_recovery_path("notes.txt");
+    TW_CHECK_EQ_STR(swap, ".notes.txt.twinline.swp");
+    free(swap);
+
+    const char *original = temp_path("work.txt");
+    TW_CHECK(WRITE_LITERAL("work.txt", "saved line\n"));
+    TW_CHECK(!tw_recovery_pending(original));
+
+    tw_document doc;
+    tw_document_init(&doc);
+    TW_CHECK_EQ_INT(tw_document_append(&doc, "saved line"), TW_OK);
+    TW_CHECK_EQ_INT(tw_document_append(&doc, "unsaved line"), TW_OK);
+    int err = 0;
+    TW_CHECK_EQ_INT(tw_recovery_write(original, &doc, &err), TW_OK);
+    tw_document_free(&doc);
+    TW_CHECK(tw_recovery_pending(original));
+
+    /* Only the owner may read it: it holds the user's text. */
+    char *path = tw_recovery_path(original);
+    struct stat st;
+    TW_CHECK(stat(path, &st) == 0);
+    TW_CHECK_EQ_INT((int)(st.st_mode & 0777), 0600);
+
+    time_t saved = 0;
+    TW_CHECK_EQ_INT(tw_recovery_read(original, &doc, &saved, &err), TW_OK);
+    TW_CHECK_EQ_SIZE(doc.count, 2);
+    TW_CHECK_EQ_STR(doc.lines[1], "unsaved line");
+    TW_CHECK(saved > 0);
+    tw_document_free(&doc);
+
+    /* A recovery file that names another path is not used. */
+    FILE *f = fopen(path, "w");
+    TW_CHECK(f != NULL);
+    fprintf(f, "%s\nsomewhere/else.txt\n0\nx\n", TW_RECOVERY_MAGIC);
+    fclose(f);
+    TW_CHECK_EQ_INT(tw_recovery_read(original, &doc, NULL, &err), TW_ERR_INVALID);
+    f = fopen(path, "w");
+    TW_CHECK(f != NULL);
+    fputs("just some text\n", f);
+    fclose(f);
+    TW_CHECK_EQ_INT(tw_recovery_read(original, &doc, NULL, &err), TW_ERR_INVALID);
+
+    tw_recovery_remove(original);
+    TW_CHECK(stat(path, &st) != 0);
+    TW_CHECK(!tw_recovery_pending(original));
+    TW_CHECK_EQ_INT(tw_recovery_read(original, &doc, NULL, &err), TW_ERR_IO);
+    tw_recovery_remove(original); /* removing twice is harmless */
+    free(path);
+}
+
 static void remove_temp_dir(void)
 {
     DIR *dir = opendir(temp_dir);
@@ -261,6 +333,8 @@ int main(void)
     TW_RUN(save_into_missing_directory_fails_cleanly);
     TW_RUN(mapped_load_matches_normal_load);
     TW_RUN(mapped_load_small_and_empty_files);
+    TW_RUN(read_from_a_stream);
+    TW_RUN(recovery_files);
 
     remove_temp_dir();
     return tw_test_summary();

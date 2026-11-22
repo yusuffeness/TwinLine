@@ -163,7 +163,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [utf8, featureset, command_parse]
+        target: [utf8, featureset, command_parse, config]
     steps:
       - uses: actions/checkout@v4
 

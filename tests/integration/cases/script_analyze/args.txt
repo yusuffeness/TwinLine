@@ -1,0 +1,4 @@
+analyze
+-t
+1
+notes.txt

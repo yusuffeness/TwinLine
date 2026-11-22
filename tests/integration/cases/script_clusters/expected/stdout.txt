@@ -1,0 +1,14 @@
+3 clusters with 7 lines in notes.txt (strategy jaccard, threshold 0.60)
+
+Cluster 1, 3 lines
+       1  first   The quick brown fox jumps over the lazy dog
+       3  same    the quick brown fox jumps over the lazy dog!
+       5  J 0.68  The quick brown fox jumped over the lazy dog
+
+Cluster 2, 2 lines
+       2  first   Meeting moved to Thursday at 10am
+       6  J 0.69  Meeting moved to Thursday at 11am
+
+Cluster 3, 2 lines
+       4  first   Buy milk, eggs and bread
+       8  same    Buy milk, eggs and bread

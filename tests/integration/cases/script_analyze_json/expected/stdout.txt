@@ -1,0 +1,20 @@
+{
+  "tool": "TwinLine",
+  "version": "<version>",
+  "file": "notes.txt",
+  "settings": {"strategy": "jaccard", "threshold": 0.6, "ngram": 2, "fold": "default", "exhaustive": false},
+  "result": {
+    "lines": 8,
+    "lines_with_words": 8,
+    "words": 53,
+    "line_pairs": 28,
+    "pairs_scored": 28,
+    "distinct_lines": null,
+    "identical_pairs": 2,
+    "near_pairs": 3,
+    "mean_similarity": null,
+    "most_similar": {"a": 2, "b": 6, "similarity": 0.692308, "a_text": "Meeting moved to Thursday at 10am", "b_text": "Meeting moved to Thursday at 11am"},
+    "threads": 1,
+    "seconds": <time>
+  }
+}

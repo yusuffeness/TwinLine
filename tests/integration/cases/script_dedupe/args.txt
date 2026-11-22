@@ -1,0 +1,5 @@
+dedupe
+--threshold=0.6
+notes.txt
+-o
+clean.txt

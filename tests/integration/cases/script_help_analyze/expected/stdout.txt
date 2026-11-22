@@ -1,0 +1,14 @@
+Usage: twinline analyze [OPTIONS] FILE
+
+Reports identical and near-duplicate lines of FILE ('-' reads standard input).
+Exits with 1 if any were found, 0 if none.
+
+  --json           Print the result as JSON
+
+Analysis options:
+  --threshold=X    Near-duplicate threshold, above 0 and at most 1
+  --strategy=NAME  jaccard, exact or minhash (also --exact, --minhash)
+  --ngram=N        Longest word n-gram compared, 1 to 4
+  -t, --threads=N  Worker threads, 1 to 256 or auto
+  --exhaustive     jaccard: compare every pair (adds the mean similarity)
+  --fold=MODE      Case folding: default or turkish

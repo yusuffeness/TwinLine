@@ -3,6 +3,8 @@ twinline> Commands:
   open[!] FILE     Load FILE (use open! to discard unsaved changes)
   save [FILE]      Save atomically to FILE or to the current file
   new [FILE]       Open a new buffer, empty or with FILE
+  reload[!]        Load the file again from disk (reload! discards changes)
+  recover [discard] Load (or delete) changes saved before a crash
   buffers          List the open buffers
   switch N         Make buffer N the active one
   close[!]         Close the active buffer (close! discards changes)

@@ -1,0 +1,4 @@
+analyze
+-o
+x.txt
+notes.txt

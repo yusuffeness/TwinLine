@@ -13,6 +13,13 @@ tw_status tw_app_init(tw_app *app)
     app->emit = tw_app_emit_plain;
     app->on_result = NULL;
     app->prefill = NULL;
+    app->notify = NULL;
+    app->autosave_interval = 0;
+    app->watch = false;
+    memset(&app->services, 0, sizeof app->services);
+    app->services.inotify_fd = -1;
+    app->services.wake_pipe[0] = -1;
+    app->services.wake_pipe[1] = -1;
     app->marks = false;
     app->ui = NULL;
     app->buffers = malloc(sizeof *app->buffers);
@@ -40,6 +47,7 @@ tw_status tw_app_init(tw_app *app)
 
 void tw_app_destroy(tw_app *app)
 {
+    tw_app_stop_services(app, true);
     atomic_store(&app->quitting, true);
     tw_job_destroy(&app->job);
     tw_session_destroy(&app->session);

@@ -1,0 +1,4 @@
+set
+open notes.txt
+clusters
+quit

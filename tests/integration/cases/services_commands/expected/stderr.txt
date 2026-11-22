@@ -1,0 +1,9 @@
+error: this buffer has no file, so there is nothing to recover.
+error: this buffer has no file to reload.
+error: autosave must be off or 1 to 3600 seconds, got '0'.
+error: autosave must be off or 1 to 3600 seconds, got '99999'.
+error: watch must be on or off, got 'maybe'.
+error: there are no recovered changes for 'notes.txt'.
+error: there are no recovered changes for 'notes.txt'.
+error: usage: recover [discard]
+error: unsaved changes. Use 'reload!' to replace them with the file on disk.

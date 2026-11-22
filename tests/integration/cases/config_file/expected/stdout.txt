@@ -1,0 +1,22 @@
+# TwinLine <version> configuration
+# Read from <workdir>/config.toml
+
+[analysis]
+threshold = 0.60
+threads = 4
+strategy = "minhash"
+exhaustive = false
+fold = "default"
+ngram = 3
+
+[ui]
+theme = "nord"
+animations = false
+color = true
+
+[autosave]
+enabled = true
+interval = 5
+
+[watch]
+enabled = false

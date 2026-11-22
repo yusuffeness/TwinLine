@@ -1,0 +1,22 @@
+# TwinLine <version> configuration
+# No configuration file is used.
+
+[analysis]
+threshold = 0.70
+threads = "auto"
+strategy = "jaccard"
+exhaustive = false
+fold = "default"
+ngram = 2
+
+[ui]
+theme = "dark"
+animations = true
+color = true
+
+[autosave]
+enabled = true
+interval = 30
+
+[watch]
+enabled = true

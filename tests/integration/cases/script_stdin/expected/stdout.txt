@@ -1,0 +1,8 @@
+Analysis of standard input:
+  Lines                       : 2 (2 with words)
+  Words                       : 6
+  Line pairs                  : 1
+  Pairs compared              : 1 (0 skipped by the size bound)
+  Identical pairs             : 0
+  Near-duplicate pairs (>=0.70): 0
+Finished in <time>

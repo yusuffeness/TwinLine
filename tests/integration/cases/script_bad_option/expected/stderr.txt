@@ -1,0 +1,2 @@
+twinline analyze: unknown option '--frobnicate'
+Try 'twinline analyze --help' for more information.

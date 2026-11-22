@@ -1,0 +1,27 @@
+{
+  "tool": "TwinLine",
+  "version": "<version>",
+  "file": "notes.txt",
+  "settings": {"strategy": "minhash", "threshold": 0.6, "ngram": 2, "fold": "default"},
+  "summary": {"lines": 8, "lines_with_words": 8, "distinct_lines": 6, "identical_pairs": 2, "near_pairs": 3, "clusters": 3, "clustered_lines": 7},
+  "clusters": [
+    {"id": 1, "size": 3, "lines": [
+      {"line": 1, "similarity": 1.0000, "text": "The quick brown fox jumps over the lazy dog"},
+      {"line": 3, "similarity": 1.0000, "text": "the quick brown fox jumps over the lazy dog!"},
+      {"line": 5, "similarity": 0.6842, "text": "The quick brown fox jumped over the lazy dog"}
+    ]},
+    {"id": 2, "size": 2, "lines": [
+      {"line": 2, "similarity": 1.0000, "text": "Meeting moved to Thursday at 10am"},
+      {"line": 6, "similarity": 0.6923, "text": "Meeting moved to Thursday at 11am"}
+    ]},
+    {"id": 3, "size": 2, "lines": [
+      {"line": 4, "similarity": 1.0000, "text": "Buy milk, eggs and bread"},
+      {"line": 8, "similarity": 1.0000, "text": "Buy milk, eggs and bread"}
+    ]}
+  ],
+  "pairs": [
+    {"a": 2, "b": 6, "similarity": 0.6923},
+    {"a": 1, "b": 5, "similarity": 0.6842}
+  ],
+  "pairs_truncated": false
+}

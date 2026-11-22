@@ -11,9 +11,13 @@ A case is a directory under tests/integration/cases/ containing:
     expected/exit.txt    expected exit status (optional, default: 0)
     expected/files/      files that must exist afterwards with this content
 
-Timings ("Finished in 0.123 s with 4 threads"), the automatic thread count and
-the version ("TwinLine 1.2.3") are replaced by placeholders before comparing,
-so results depend neither on the machine nor on the release.
+Timings ("Finished in 0.123 s with 4 threads", "seconds" in JSON), the
+automatic thread count, the version ("TwinLine 1.2.3", "version" in JSON) and
+the temporary working directory are replaced by placeholders before
+comparing, so results depend neither on the machine nor on the release.
+
+TWINLINE_CONFIG points at config.toml in the working directory, so the
+user's own configuration is never read and a case can bring its own.
 
 Usage:
     run_case.py --binary build/twinline --case tests/integration/cases/help
@@ -39,11 +43,21 @@ from pathlib import Path
 TIMING = re.compile(r"Finished in \d+\.\d+ s with \d+ threads?")
 VERSION = re.compile(r"TwinLine \d+\.\d+\.\d+")
 AUTO_THREADS = re.compile(r"Threads  : \d+ \(one per processor\)")
+JSON_VERSION = re.compile(r'"version": "\d+\.\d+\.\d+"')
+JSON_SECONDS = re.compile(r'"seconds": \d+\.\d+')
+CONFIG_VERSION = re.compile(r"# TwinLine \d+\.\d+\.\d+ configuration")
 TIMEOUT_SECONDS = 120
 
 
-def normalise(text: str) -> str:
+def normalise(text: str, workdir: Path | None = None) -> str:
+    if workdir is not None:
+        # The temporary directory, also as the resolved path (/private/var on macOS).
+        for form in {str(workdir.resolve()), str(workdir)}:
+            text = text.replace(form, "<workdir>")
     text = TIMING.sub("Finished in <time>", text)
+    text = JSON_VERSION.sub('"version": "<version>"', text)
+    text = JSON_SECONDS.sub('"seconds": <time>', text)
+    text = CONFIG_VERSION.sub("# TwinLine <version> configuration", text)
     text = AUTO_THREADS.sub("Threads  : <auto> (one per processor)", text)
     return VERSION.sub("TwinLine <version>", text)
 
@@ -83,11 +97,13 @@ def run(binary: Path, case: Path, update: bool) -> int:
             encoding="utf-8",
             cwd=workdir,
             timeout=TIMEOUT_SECONDS,
-            env={**os.environ, "LC_ALL": "C.UTF-8"},
+            # A case may bring its own config.toml; the user's own file is never read.
+            env={**os.environ, "LC_ALL": "C.UTF-8",
+                 "TWINLINE_CONFIG": str(workdir / "config.toml")},
         )
         actual = {
-            "stdout.txt": normalise(proc.stdout),
-            "stderr.txt": normalise(proc.stderr),
+            "stdout.txt": normalise(proc.stdout, workdir),
+            "stderr.txt": normalise(proc.stderr, workdir),
             "exit.txt": f"{proc.returncode}\n",
         }
 

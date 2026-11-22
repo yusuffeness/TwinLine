@@ -1,0 +1,1 @@
+twinline: <workdir>/config.toml:3: strategy must be jaccard, exact or minhash, got 'fastest'.

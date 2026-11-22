@@ -10,6 +10,8 @@ set(TWINLINE_UNIT_TESTS
     fileio
     analysis
     similarity
+    config
+    services
     parallel
     job
     tui_keys
@@ -57,7 +59,7 @@ endif()
 # Fuzz targets: libFuzzer when TWINLINE_BUILD_FUZZERS is ON, otherwise a
 # standalone driver that replays the seed corpus as a regression test.
 # ---------------------------------------------------------------------------
-set(TWINLINE_FUZZ_TARGETS utf8 featureset command_parse)
+set(TWINLINE_FUZZ_TARGETS utf8 featureset command_parse config)
 
 foreach(name IN LISTS TWINLINE_FUZZ_TARGETS)
   set(seed_dir ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/${name})

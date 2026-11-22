@@ -3,7 +3,7 @@ set
 set strategy minhash
 set ngram 3
 set fold turkish
-set threads 2
+set threads 1
 set exhaustive on
 set
 analyze-sync

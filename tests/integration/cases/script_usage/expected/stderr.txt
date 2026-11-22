@@ -1,0 +1,2 @@
+twinline dedupe: --json applies to analyze and clusters
+Try 'twinline dedupe --help' for more information.

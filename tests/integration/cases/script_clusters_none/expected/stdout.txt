@@ -1,0 +1,10 @@
+{
+  "tool": "TwinLine",
+  "version": "<version>",
+  "file": null,
+  "settings": {"strategy": "jaccard", "threshold": 0.7, "ngram": 2, "fold": "default"},
+  "summary": {"lines": 2, "lines_with_words": 2, "distinct_lines": 2, "identical_pairs": 0, "near_pairs": 0, "clusters": 0, "clustered_lines": 0},
+  "clusters": [],
+  "pairs": [],
+  "pairs_truncated": false
+}

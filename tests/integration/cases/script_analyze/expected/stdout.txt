@@ -1,0 +1,11 @@
+Analysis of notes.txt:
+  Lines                       : 8 (8 with words)
+  Words                       : 53
+  Line pairs                  : 28
+  Pairs compared              : 22 (6 skipped by the size bound)
+  Identical pairs             : 2
+  Near-duplicate pairs (>=0.70): 0
+  Most similar distinct pair  : lines 2 and 6 (J = 0.692)
+    2: Meeting moved to Thursday at 10am
+    6: Meeting moved to Thursday at 11am
+Finished in <time>

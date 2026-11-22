@@ -17,14 +17,35 @@
 #include "twinline/status.h"
 #include "twinline/undo.h"
 
+/* What a file on disk looked like when TwinLine last read or wrote it, so a
+ * change by another program can be told apart from our own saves. */
+typedef struct tw_file_id {
+    bool valid; /* false: unknown, or the buffer has no file */
+    unsigned long long device;
+    unsigned long long inode;
+    long long size;
+    long long mtime_sec;
+    long mtime_nsec;
+} tw_file_id;
+
+/* Fills `id` from the file at `path`; id->valid is false if it is missing. */
+void tw_file_id_read(const char *path, tw_file_id *id);
+
+/* True if both describe the same file contents (or are both invalid). */
+bool tw_file_id_equal(const tw_file_id *a, const tw_file_id *b);
+
 /* Everything that belongs to one open document. */
 typedef struct tw_buffer {
     tw_document doc;
     char *path; /* file the document was loaded from or last saved to; may be NULL */
     bool dirty; /* true when there are unsaved changes */
     tw_undo undo;
-    unsigned long long saved_state; /* undo state when last opened or saved */
-    size_t page;                    /* first line of the next "show" page, 0-based */
+    unsigned long long saved_state;     /* undo state when last opened or saved */
+    size_t page;                        /* first line of the next "show" page, 0-based */
+    tw_file_id disk;                    /* the file as last read or written */
+    bool disk_reported;                 /* a change on disk was already reported */
+    unsigned long long autosaved_state; /* undo state in the recovery file, 0 if none */
+    bool recovery_offered; /* an old recovery file waits for "recover": do not overwrite it */
 } tw_buffer;
 
 void tw_buffer_init(tw_buffer *buffer);
@@ -40,6 +61,10 @@ typedef struct tw_session {
     tw_undo undo;
     unsigned long long saved_state;
     size_t page;
+    tw_file_id disk;
+    bool disk_reported;
+    unsigned long long autosaved_state;
+    bool recovery_offered;
 } tw_session;
 
 tw_status tw_session_init(tw_session *session);
@@ -68,7 +93,8 @@ tw_status tw_session_redo_locked(tw_session *session, const tw_edit **edit);
  * (may be NULL); the previous document goes into `doc`. Caller holds the lock. */
 tw_status tw_session_replace_locked(tw_session *session, tw_document *doc, const char *path);
 
-/* Records that the document was just saved. Caller holds the lock. */
+/* Records that the document was just saved to session->path (and what the
+ * file now looks like). Caller holds the lock. */
 void tw_session_mark_saved_locked(tw_session *session);
 
 /* Exchanges the active buffer with `buffer`. Caller holds the lock. */

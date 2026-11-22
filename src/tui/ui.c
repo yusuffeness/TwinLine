@@ -983,6 +983,16 @@ static void execute(tw_ui *ui, const char *typed)
         ui->quit = true;
 }
 
+/* tw_notify_fn: a quiet notice as a toast. Called from the services thread. */
+static void ui_notify(tw_app *app, const char *text)
+{
+    tw_ui *ui = app->ui;
+    pthread_mutex_lock(&ui->lock);
+    show_toast(ui, TW_TOAST_INFO, text);
+    refresh(ui);
+    pthread_mutex_unlock(&ui->lock);
+}
+
 /* tw_prefill_fn: keeps the text until the command returns (main thread). */
 static void ui_prefill(tw_app *app, const char *text)
 {
@@ -1394,6 +1404,7 @@ bool tw_ui_run(tw_app *app, const tw_ui_options *options)
     app->emit = ui_emit;
     app->on_result = ui_on_result;
     app->prefill = ui_prefill;
+    app->notify = ui_notify;
     app->marks = true;
 
     pthread_mutex_lock(&ui.lock);
@@ -1452,7 +1463,8 @@ bool tw_ui_run(tw_app *app, const tw_ui_options *options)
     atomic_store(&app->quitting, true);
     if (tw_job_is_running(&app->job))
         tw_job_cancel(&app->job);
-    tw_job_wait(&app->job); /* the worker may still report through ui_emit */
+    tw_job_wait(&app->job);           /* the worker may still report through ui_emit */
+    tw_app_stop_services(app, false); /* it reports through ui_emit and ui_notify too */
 
     pthread_mutex_lock(&ui.lock);
     ui.toast_active = false;
@@ -1467,6 +1479,7 @@ bool tw_ui_run(tw_app *app, const tw_ui_options *options)
     app->emit = tw_app_emit_plain;
     app->on_result = NULL;
     app->prefill = NULL;
+    app->notify = NULL;
     app->marks = false;
     app->ui = NULL;
     ui_free(&ui);

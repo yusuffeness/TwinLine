@@ -9,11 +9,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
+#include "cmd/config.h"
 #include "cmd/export.h"
 #include "cmd/report.h"
 #include "cmd/settings.h"
 #include "twinline/fileio.h"
+#include "twinline/recovery.h"
 #include "twinline/utf8.h"
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -153,6 +156,45 @@ static const char *buffer_name(const char *path)
 /* Files                                                                     */
 /* ------------------------------------------------------------------------ */
 
+/* Deletes the recovery file the autosave wrote for the active buffer, when
+ * its changes are saved or discarded. Caller holds the session lock. */
+static void drop_recovery_locked(tw_app *app)
+{
+    if (app->session.path != NULL && app->session.autosaved_state != 0)
+        tw_recovery_remove(app->session.path);
+    app->session.autosaved_state = 0;
+}
+
+/* "2026-11-22 10:41" in local time */
+static void format_time(time_t when, char *buf, size_t size)
+{
+    struct tm tm;
+    if (localtime_r(&when, &tm) == NULL || strftime(buf, size, "%Y-%m-%d %H:%M", &tm) == 0)
+        snprintf(buf, size, "an earlier session");
+}
+
+/* Mentions a recovery file left by a session that did not end normally.
+ * Caller holds the session lock. */
+static void offer_recovery_locked(tw_app *app)
+{
+    const char *path = app->session.path;
+    if (path == NULL || !tw_recovery_pending(path))
+        return;
+    tw_document doc;
+    time_t saved = 0;
+    int err_no = 0;
+    if (tw_recovery_read(path, &doc, &saved, &err_no) != TW_OK)
+        return;
+    char when[32];
+    format_time(saved, when, sizeof when);
+    fprintf(app->err,
+            "warning: unsaved changes from %s were recovered (%zu line%s). Type 'recover' to "
+            "load them or 'recover discard' to delete them.\n",
+            when, doc.count, plural(doc.count));
+    tw_document_free(&doc);
+    app->session.recovery_offered = true;
+}
+
 static bool load_file(tw_app *app, const char *path, tw_document *doc)
 {
     int err_no = 0;
@@ -179,19 +221,21 @@ void tw_command_open(tw_app *app, const char *path, bool force)
         return;
 
     pthread_mutex_lock(&app->session.lock);
+    drop_recovery_locked(app); /* the old document's changes are being discarded */
     tw_status status = tw_session_replace_locked(&app->session, &doc, path);
     size_t lines = app->session.doc.count;
+    if (status == TW_OK) {
+        fprintf(app->out, "Opened '%s' (%zu line%s).\n", path, lines, plural(lines));
+        offer_recovery_locked(app);
+    }
     pthread_mutex_unlock(&app->session.lock);
 
     /* `doc` now holds the previous document (or the new one on failure).
      * Background workers use their own snapshot, so freeing it is safe. */
     tw_document_free(&doc);
 
-    if (status != TW_OK) {
+    if (status != TW_OK)
         print_error(app, "cannot open '%s': %s", path, tw_status_str(status));
-        return;
-    }
-    fprintf(app->out, "Opened '%s' (%zu line%s).\n", path, lines, plural(lines));
 }
 
 static void cmd_open(tw_app *app, const char *arg, bool force)
@@ -213,10 +257,17 @@ static void cmd_save(tw_app *app, const char *arg, bool force)
 
     int err_no = 0;
     tw_status status = tw_file_save(path, &app->session.doc, &err_no);
+    if (status == TW_OK)
+        drop_recovery_locked(app); /* the changes are safe on disk now */
     if (status == TW_OK && path != app->session.path)
         status = tw_session_set_path_locked(&app->session, path);
-    if (status == TW_OK)
+    if (status == TW_OK) {
         tw_session_mark_saved_locked(&app->session);
+        if (app->session.recovery_offered) {
+            tw_recovery_remove(app->session.path); /* saving settles the old recovery file */
+            app->session.recovery_offered = false;
+        }
+    }
     size_t lines = app->session.doc.count;
     pthread_mutex_unlock(&app->session.lock);
 
@@ -691,6 +742,8 @@ static void cmd_close(tw_app *app, const char *arg, bool force)
     bool had_more = app->buffer_count > 1;
     char *name = strdup(buffer_name(app->session.path));
 
+    drop_recovery_locked(app);
+
     /* Take the active buffer out of the session and drop it. */
     tw_buffer gone;
     tw_buffer_init(&gone);
@@ -715,6 +768,105 @@ static void cmd_close(tw_app *app, const char *arg, bool force)
         fprintf(app->out, "Closed %s; the buffer is now empty.\n", name ? name : "the buffer");
     pthread_mutex_unlock(&app->session.lock);
     free(name);
+}
+
+static void cmd_recover(tw_app *app, const char *arg, bool force)
+{
+    (void)force;
+    bool discard = strcmp(arg, "discard") == 0;
+    if (*arg != '\0' && !discard) {
+        print_error(app, "usage: recover [discard]");
+        return;
+    }
+    pthread_mutex_lock(&app->session.lock);
+    char *path = app->session.path != NULL ? strdup(app->session.path) : NULL;
+    pthread_mutex_unlock(&app->session.lock);
+    if (path == NULL) {
+        print_error(app, "this buffer has no file, so there is nothing to recover.");
+        return;
+    }
+
+    tw_document doc;
+    time_t saved = 0;
+    int err_no = 0;
+    tw_status status = tw_recovery_read(path, &doc, &saved, &err_no);
+    if (status != TW_OK) {
+        print_error(app, "there are no recovered changes for '%s'.", path);
+        free(path);
+        return;
+    }
+    if (discard) {
+        tw_document_free(&doc);
+        tw_recovery_remove(path);
+        pthread_mutex_lock(&app->session.lock);
+        app->session.recovery_offered = false;
+        pthread_mutex_unlock(&app->session.lock);
+        fprintf(app->out, "Deleted the recovered changes of '%s'.\n", path);
+        free(path);
+        return;
+    }
+
+    /* One edit: 'undo' goes back to the file as it is on disk. */
+    pthread_mutex_lock(&app->session.lock);
+    status = tw_session_edit_locked(&app->session, 0, app->session.doc.count,
+                                    (const char *const *)doc.lines, doc.count);
+    if (status == TW_OK)
+        app->session.recovery_offered = false;
+    pthread_mutex_unlock(&app->session.lock);
+    size_t lines = doc.count;
+    tw_document_free(&doc);
+    if (status != TW_OK) {
+        print_error(app, "cannot recover: %s", tw_status_str(status));
+    } else {
+        char when[32];
+        format_time(saved, when, sizeof when);
+        fprintf(app->out,
+                "Recovered %zu line%s from %s. Type 'save' to keep them or 'undo' to go back.\n",
+                lines, plural(lines), when);
+    }
+    free(path);
+}
+
+static void cmd_reload(tw_app *app, const char *arg, bool force)
+{
+    (void)arg;
+    pthread_mutex_lock(&app->session.lock);
+    char *path = app->session.path != NULL ? strdup(app->session.path) : NULL;
+    bool dirty = app->session.dirty;
+    pthread_mutex_unlock(&app->session.lock);
+    if (path == NULL) {
+        print_error(app, "this buffer has no file to reload.");
+        return;
+    }
+    if (dirty && !force) {
+        print_error(app, "unsaved changes. Use 'reload!' to replace them with the file on disk.");
+        free(path);
+        return;
+    }
+    tw_document doc;
+    if (!load_file(app, path, &doc)) {
+        free(path);
+        return;
+    }
+
+    /* One edit, then clean: 'undo' brings the previous text back. */
+    pthread_mutex_lock(&app->session.lock);
+    tw_status status = tw_session_edit_locked(&app->session, 0, app->session.doc.count,
+                                              (const char *const *)doc.lines, doc.count);
+    if (status == TW_OK) {
+        drop_recovery_locked(app);
+        tw_session_mark_saved_locked(&app->session);
+    }
+    pthread_mutex_unlock(&app->session.lock);
+    size_t lines = doc.count;
+    tw_document_free(&doc);
+    if (status != TW_OK)
+        print_error(app, "cannot reload '%s': %s", path, tw_status_str(status));
+    else
+        fprintf(app->out,
+                "Reloaded '%s' (%zu line%s). Type 'undo' to get the previous text back.\n", path,
+                lines, plural(lines));
+    free(path);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -890,6 +1042,11 @@ static void cmd_set(tw_app *app, const char *arg, bool force)
     (void)force;
     if (*arg == '\0') {
         tw_settings_print(app->out, &app->options);
+        if (app->autosave_interval == 0)
+            fprintf(app->out, "autosave    off\n");
+        else
+            fprintf(app->out, "autosave    %u s\n", app->autosave_interval);
+        fprintf(app->out, "watch       %s\n", app->watch ? "on" : "off");
         return;
     }
     char name[32];
@@ -906,6 +1063,36 @@ static void cmd_set(tw_app *app, const char *arg, bool force)
     snprintf(trimmed, sizeof trimmed, "%s", value);
     trim_trailing_space(trimmed);
 
+    if (strcmp(name, "autosave") == 0 || strcmp(name, "watch") == 0) {
+        unsigned interval = app->autosave_interval;
+        bool watch = app->watch;
+        if (strcmp(name, "watch") == 0) {
+            if (strcmp(trimmed, "on") != 0 && strcmp(trimmed, "off") != 0) {
+                print_error(app, "watch must be on or off, got '%s'.", trimmed);
+                return;
+            }
+            watch = strcmp(trimmed, "on") == 0;
+        } else if (strcmp(trimmed, "off") == 0) {
+            interval = 0;
+        } else {
+            const char *p = trimmed;
+            size_t seconds = 0;
+            if (!parse_number(&p, &seconds) || *p != '\0' || seconds == 0 ||
+                seconds > TW_AUTOSAVE_MAX_INTERVAL) {
+                print_error(app, "autosave must be off or 1 to %d seconds, got '%s'.",
+                            TW_AUTOSAVE_MAX_INTERVAL, trimmed);
+                return;
+            }
+            interval = (unsigned)seconds;
+        }
+        /* Restart the services with the new settings. */
+        tw_app_stop_services(app, false);
+        app->autosave_interval = interval;
+        app->watch = watch;
+        tw_app_start_services(app);
+        fprintf(app->out, "%s set to %s.\n", name, trimmed);
+        return;
+    }
     if (tw_job_is_running(&app->job)) {
         print_error(app, "an analysis is running; change the settings when it is done.");
         return;
@@ -1220,6 +1407,14 @@ static const command_spec COMMANDS[] = {
      ARGS_OPTIONAL_FILE,
      false,
      cmd_new},
+    {{"reload", "reload[!]", "Load the file again from disk (reload! discards changes)", false},
+     ARGS_NONE,
+     true,
+     cmd_reload},
+    {{"recover", "recover [discard]", "Load (or delete) changes saved before a crash", false},
+     ARGS_WORD_OPTIONAL,
+     false,
+     cmd_recover},
     {{"buffers", "buffers", "List the open buffers", false}, ARGS_NONE, false, cmd_buffers},
     {{"switch", "switch N", "Make buffer N the active one", false}, ARGS_WORD, false, cmd_switch},
     {{"close", "close[!]", "Close the active buffer (close! discards changes)", false},

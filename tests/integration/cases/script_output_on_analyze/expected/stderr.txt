@@ -1,0 +1,2 @@
+twinline analyze: -o and --in-place only apply to dedupe
+Try 'twinline analyze --help' for more information.

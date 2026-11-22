@@ -328,6 +328,89 @@ static void write_html(FILE *out, const tw_document *doc, const tw_similarity *s
             TWINLINE_VERSION);
 }
 
+/* ------------------------------------------------------------------ text */
+
+bool tw_export_write_text(FILE *out, const tw_document *doc, const tw_similarity *s,
+                          const tw_analysis_options *options, const char *source)
+{
+    if (s->cluster_count == 0) {
+        fprintf(out, "No similar lines in %s (strategy %s, threshold %.2f).\n",
+                source != NULL ? source : "the input", tw_strategy_name(s->strategy), s->threshold);
+        return !ferror(out);
+    }
+    fprintf(out, "%zu cluster%s with %zu lines in %s (strategy %s, threshold %.2f)\n",
+            s->cluster_count, s->cluster_count == 1 ? "" : "s", clustered_lines(s),
+            source != NULL ? source : "the input", tw_strategy_name(s->strategy), s->threshold);
+    for (size_t k = 0; k < s->cluster_count; k++) {
+        size_t begin = s->cluster_start[k];
+        size_t end = s->cluster_start[k + 1];
+        size_t first = s->cluster_lines[begin];
+        fprintf(out, "\nCluster %zu, %zu lines\n", k + 1, end - begin);
+        for (size_t i = begin; i < end; i++) {
+            size_t line = s->cluster_lines[i];
+            double j = member_similarity(doc, options, first, line);
+            char tag[16];
+            if (i == begin)
+                snprintf(tag, sizeof tag, "first ");
+            else if (j >= 1.0)
+                snprintf(tag, sizeof tag, "same  ");
+            else
+                snprintf(tag, sizeof tag, "J %.2f", j);
+            fprintf(out, "%8zu  %s  %s\n", line + 1, tag, doc->lines[line]);
+        }
+    }
+    return !ferror(out);
+}
+
+/* ------------------------------------------------------- analysis as JSON */
+
+bool tw_export_result_json(FILE *out, const tw_analysis_result *r, const tw_document *doc,
+                           const tw_analysis_options *options, const char *source)
+{
+    fputs("{\n  \"tool\": \"TwinLine\",\n  \"version\": ", out);
+    json_string(out, TWINLINE_VERSION);
+    fputs(",\n  \"file\": ", out);
+    if (source != NULL)
+        json_string(out, source);
+    else
+        fputs("null", out);
+    fprintf(out,
+            ",\n  \"settings\": {\"strategy\": \"%s\", \"threshold\": %.4g, \"ngram\": %d, "
+            "\"fold\": \"%s\", \"exhaustive\": %s},\n",
+            tw_strategy_name(r->strategy), r->threshold, options->ngram, fold_name(options->fold),
+            r->exhaustive ? "true" : "false");
+    fprintf(out,
+            "  \"result\": {\n    \"lines\": %zu,\n    \"lines_with_words\": %zu,\n"
+            "    \"words\": %zu,\n    \"line_pairs\": %llu,\n    \"pairs_scored\": %llu,\n",
+            r->lines_total, r->lines_with_words, r->words_total, r->pairs, r->compared);
+    if (r->strategy == TW_STRATEGY_JACCARD)
+        fputs("    \"distinct_lines\": null,\n", out);
+    else
+        fprintf(out, "    \"distinct_lines\": %zu,\n", r->unique_lines);
+    fprintf(out, "    \"identical_pairs\": %llu,\n", r->identical);
+    if (r->strategy == TW_STRATEGY_EXACT)
+        fputs("    \"near_pairs\": null,\n", out);
+    else
+        fprintf(out, "    \"near_pairs\": %llu,\n", r->near);
+    if (r->exhaustive && r->strategy == TW_STRATEGY_JACCARD)
+        fprintf(out, "    \"mean_similarity\": %.6f,\n", r->mean_similarity);
+    else
+        fputs("    \"mean_similarity\": null,\n", out);
+    if (r->best_similarity > 0.0 && r->best_a >= 1 && r->best_b <= doc->count) {
+        fprintf(out,
+                "    \"most_similar\": {\"a\": %zu, \"b\": %zu, \"similarity\": %.6f, \"a_text\": ",
+                r->best_a, r->best_b, r->best_similarity);
+        json_string(out, doc->lines[r->best_a - 1]);
+        fputs(", \"b_text\": ", out);
+        json_string(out, doc->lines[r->best_b - 1]);
+        fputs("},\n", out);
+    } else {
+        fputs("    \"most_similar\": null,\n", out);
+    }
+    fprintf(out, "    \"threads\": %zu,\n    \"seconds\": %.6f\n  }\n}\n", r->threads, r->seconds);
+    return !ferror(out);
+}
+
 bool tw_export_write(FILE *out, tw_export_format format, const tw_document *doc,
                      const tw_similarity *similarity, const tw_analysis_options *options,
                      const char *source)

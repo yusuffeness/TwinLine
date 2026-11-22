@@ -1,0 +1,4 @@
+Usage: twinline config [--path]
+
+Prints the configuration in effect as a TOML file, or with --path only the
+file it is read from.

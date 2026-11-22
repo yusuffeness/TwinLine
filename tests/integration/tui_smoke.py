@@ -46,6 +46,7 @@ class Session:
             os.chdir(cwd)
             env = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor")
             env.pop("NO_COLOR", None)
+            env["TWINLINE_CONFIG"] = os.path.join(cwd, "config.toml")  # never the user's
             os.execvpe(argv[0], argv, env)
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 100, 0, 0))
         self.raw = b""

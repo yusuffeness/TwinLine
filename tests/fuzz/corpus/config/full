@@ -1,0 +1,16 @@
+# my settings
+[analysis]
+threshold = 0.6   # looser
+strategy = "minhash"
+ngram = 3
+threads = 4
+
+[ui]
+theme = "nord"
+animations = false
+
+[autosave]
+interval = 5
+
+[watch]
+enabled = false

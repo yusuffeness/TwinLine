@@ -119,6 +119,15 @@ tw_status tw_file_load_ex(const char *path, tw_document *out, int *err_no, size_
         *err_no = errno;
         return TW_ERR_IO;
     }
+    tw_status status = tw_file_read(file, out, err_no);
+    fclose(file);
+    return status;
+}
+
+tw_status tw_file_read(FILE *file, tw_document *out, int *err_no)
+{
+    *err_no = 0;
+    tw_document_init(out);
 
     tw_document doc;
     tw_document_init(&doc);
@@ -153,7 +162,6 @@ tw_status tw_file_load_ex(const char *path, tw_document *out, int *err_no, size_
     }
 
     free(buf);
-    fclose(file);
 
     if (status != TW_OK) {
         tw_document_free(&doc);
@@ -178,6 +186,12 @@ static int write_lines(FILE *file, const tw_document *doc)
 
 tw_status tw_file_save(const char *path, const tw_document *doc, int *err_no)
 {
+    return tw_file_save_ex(path, NULL, doc, 0, err_no);
+}
+
+tw_status tw_file_save_ex(const char *path, const char *prefix, const tw_document *doc,
+                          unsigned mode_override, int *err_no)
+{
     *err_no = 0;
 
     size_t path_len = strlen(path);
@@ -198,7 +212,9 @@ tw_status tw_file_save(const char *path, const tw_document *doc, int *err_no)
      * target exists, otherwise use the conventional 0644. Best effort only. */
     struct stat st;
     mode_t mode = TW_DEFAULT_MODE;
-    if (stat(path, &st) == 0)
+    if (mode_override != 0)
+        mode = (mode_t)(mode_override & 07777);
+    else if (stat(path, &st) == 0)
         mode = (mode_t)(st.st_mode & 07777);
     (void)fchmod(fd, mode);
 
@@ -211,7 +227,11 @@ tw_status tw_file_save(const char *path, const tw_document *doc, int *err_no)
         return TW_ERR_IO;
     }
 
-    int err = write_lines(file, doc);
+    int err = 0;
+    if (prefix != NULL && fputs(prefix, file) == EOF)
+        err = errno ? errno : EIO;
+    if (err == 0)
+        err = write_lines(file, doc);
     if (fclose(file) != 0 && err == 0)
         err = errno ? errno : EIO;
     if (err == 0 && rename(temp_path, path) != 0)
