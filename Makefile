@@ -11,7 +11,7 @@ SOURCES     := $(shell find src include tests bench -name '*.[ch]' 2>/dev/null)
 
 .DEFAULT_GOAL := build
 
-.PHONY: help build debug release test asan tsan coverage bench bench-large bench-accuracy run install corpus clean format format-check tidy
+.PHONY: help build debug release test asan tsan coverage bench bench-large bench-accuracy package run install corpus clean format format-check tidy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -74,6 +74,9 @@ run: build ## Build and run twinline
 
 install: build ## Install into the CMake prefix (default /usr/local)
 	$(CMAKE) --install $(BUILD_DIR)
+
+package: release ## Build the .deb and .tar.gz packages in build/ (cpack)
+	cd $(BUILD_DIR) && cpack -G DEB && cpack -G TGZ
 
 corpus: ## Generate a test corpus in corpus/ (CORPUS_SIZE=1MiB)
 	$(PYTHON) scripts/gen_corpus.py --size $(CORPUS_SIZE) --output corpus/corpus-$(CORPUS_SIZE).txt

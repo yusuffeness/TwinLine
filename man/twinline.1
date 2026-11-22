@@ -1,0 +1,302 @@
+.\" Manual page for TwinLine.
+.\" SPDX-License-Identifier: MIT
+.TH TWINLINE 1 "2026-11-22" "TwinLine 1.0.0" "User Commands"
+.SH NAME
+twinline \- a terminal editor that finds the lines that look alike
+.SH SYNOPSIS
+.B twinline
+.RI [ options ]
+.RI [ file ]
+.br
+.B twinline analyze
+.RI [ options ]
+.I file
+.br
+.B twinline clusters
+.RI [ options ]
+.I file
+.br
+.B twinline dedupe
+.RI [ options ]
+.I file
+.RB [ \-o
+.IR output " | " \fB\-\-in\-place\fR ]
+.br
+.B twinline export
+.RI [ options ]
+.I file report
+.br
+.B twinline config
+.RB [ \-\-path ]
+.SH DESCRIPTION
+.B TwinLine
+is a line-based text editor with a built-in near-duplicate detector.
+It finds lines that are identical or nearly identical, groups them into
+clusters and can remove the copies.
+Two lines are compared by the Jaccard similarity of their features: their
+case-folded words and their word n-grams.
+.PP
+Without a subcommand, TwinLine opens
+.I file
+(if given) in its interactive editor: a colourful terminal interface when
+standard input and output are terminals, a plain line interface otherwise.
+With a subcommand it runs once and exits, for scripts and pipelines.
+In the subcommands,
+.I file
+may be
+.B \-
+for standard input.
+.SH SUBCOMMANDS
+.TP
+.BI "analyze " file
+Report identical and near-duplicate lines.
+Exits with 1 if any were found.
+.TP
+.BI "clusters " file
+List the clusters of similar lines, each line with its similarity to the
+first line of its cluster.
+Exits with 1 if any were found.
+.TP
+.BI "dedupe " file
+Keep the first line of every cluster and remove the others.
+The result goes to standard output, to the file given with
+.BR \-o ,
+or over
+.I file
+with
+.BR \-\-in\-place .
+A summary is printed on standard error unless
+.B \-q
+is given.
+.TP
+.BI "export " "file report"
+Write the clusters to
+.IR report ,
+a
+.BR .json ,
+.B .csv
+or
+.B .html
+file.
+.TP
+.B config
+Print the configuration in effect as a TOML file, or with
+.B \-\-path
+the file it is read from.
+.SH OPTIONS
+.SS Analysis
+.TP
+.BI \-\-threshold= x
+Pairs with a similarity of at least
+.I x
+are near duplicates; above 0 and at most 1 (default 0.70).
+.TP
+.BI \-\-strategy= name
+.B jaccard
+(default) scores every pair, with exact pruning;
+.B exact
+finds identical lines only, in linear time;
+.B minhash
+uses MinHash signatures and LSH bands for large files: every reported pair is
+real, but a few pairs can be missed.
+.TP
+.BR \-\-exact ", " \-\-minhash
+Short for
+.B \-\-strategy=exact
+and
+.BR \-\-strategy=minhash .
+.TP
+.BI \-\-ngram= n
+Longest word n-gram compared, 1 to 4 (default 2).
+1 ignores word order; higher values make it count more.
+.TP
+.BI \-\-threads= n ", \-t " n
+Worker threads, 1 to 256 (default: one per processor).
+.TP
+.B \-\-exhaustive
+With the jaccard strategy, score every pair; slower, but adds the mean
+similarity.
+.TP
+.BI \-\-fold= mode
+Case folding:
+.B default
+or
+.B turkish
+(capital I becomes dotless \[u0131]).
+.SS Subcommands
+.TP
+.B \-\-json
+.RB ( analyze ", " clusters )
+Print JSON instead of text.
+.TP
+.BI \-o " file" ", \-\-output=" file
+.RB ( dedupe )
+Write the result to
+.IR file ,
+atomically.
+.TP
+.BR \-i ", " \-\-in\-place
+.RB ( dedupe )
+Replace the input file, atomically.
+.TP
+.BR \-q ", " \-\-quiet
+.RB ( dedupe )
+Do not print the summary.
+.SS Editor
+.TP
+.BI \-\-theme= name
+Colour theme:
+.BR dark " (default), " light ", " dracula " or " nord .
+.TP
+.B \-\-no\-color
+No colours.
+.TP
+.B \-\-no\-animation
+No animations.
+.TP
+.B \-\-plain
+The plain line interface, even in a terminal.
+.SS General
+.TP
+.BI \-\-config= file
+Read settings from
+.I file
+instead of the default configuration file.
+.TP
+.B \-\-no\-config
+Read no configuration file.
+.TP
+.BR \-h ", " \-\-help
+Show a summary of the options.
+.TP
+.BR \-V ", " \-\-version
+Show the version.
+.SH EDITOR COMMANDS
+In the interactive editor, commands are typed with a leading
+.B /
+in the terminal interface (optional in the plain one); type
+.B /
+to open a menu of them, or
+.B help
+for the list.
+.TP
+.BI "open[!] " file ", save [" file "], new [" file "], buffers, switch " n ", close[!]"
+Files and buffers. Saves are atomic.
+.TP
+.BI "append " text ", insert " "n text" ", delete " n\fR[\fB\-\fIm\fR] ", replace " "n text" ", edit " n
+Change lines.
+.TP
+.B undo\fR, \fBredo
+Step through the changes, up to 1000 per buffer.
+.TP
+.BI "show[!] [" n "[\-" m "]], goto " n ", find " text
+View the document a page at a time and search it.
+.TP
+.B analyze\fR, \fBanalyze\-sync\fR, \fBcancel\fR, \fBthreads
+Run the analysis in the background (or wait for it) and follow it.
+.TP
+.BI "clusters [" n "], dedupe [" n " [" k "]], export " report
+Review the clusters, remove copies (one
+.B undo
+restores them) and save a report.
+.TP
+.BI "set [" "name value" ]
+Show or change the settings:
+.BR threshold ", " threads ", " strategy ", " exhaustive ", " fold ", "
+.BR ngram ", " autosave ", " watch .
+.TP
+.B reload[!]\fR, \fBrecover [discard]
+Load a file changed by another program; restore changes saved before a crash.
+.TP
+.B status\fR, \fBhelp\fR, \fBquit[!]
+The file, settings and analysis progress; the list of commands; exit
+.RB ( quit
+asks again when a buffer has unsaved changes).
+.SH FILES
+.TP
+.I ~/.config/twinline/config.toml
+The configuration file (also under
+.BR $XDG_CONFIG_HOME ).
+Its tables are
+.BR [analysis] ,
+.BR [ui] ,
+.B [autosave]
+and
+.BR [watch] ;
+.B twinline config
+prints a complete example.
+.TP
+.IB dir /. name .twinline.swp
+Recovery file for
+.IB dir / name\fR,
+written by the autosave while the file has unsaved changes and removed when
+it is saved or TwinLine quits normally.
+.SH ENVIRONMENT
+.TP
+.B TWINLINE_CONFIG
+Path of the configuration file.
+.TP
+.B XDG_CONFIG_HOME
+Where the configuration directory is, if
+.B TWINLINE_CONFIG
+is not set.
+.TP
+.B NO_COLOR
+If set and not empty, no colours are used.
+.TP
+.B TWINLINE_REDUCE_MOTION
+If set to anything but 0, animations are turned off.
+.TP
+.BR COLORTERM ", " TERM
+Decide between 24-bit, 256 and no colours.
+.SH EXIT STATUS
+.TP
+.B 0
+Success;
+.B analyze
+and
+.B clusters
+found nothing similar.
+.TP
+.B 1
+.B analyze
+or
+.B clusters
+found identical or near-duplicate lines.
+.TP
+.B 2
+A bad command line or configuration file.
+.TP
+.B 3
+A file could not be read or written.
+.TP
+.B 4
+Any other failure.
+.SH EXAMPLES
+Edit a file:
+.PP
+.RS
+.B twinline notes.txt
+.RE
+.PP
+Fail a CI step when a file has duplicate lines:
+.PP
+.RS
+.B twinline analyze docs/glossary.txt
+.RE
+.PP
+Remove near-duplicate lines from a large log, with MinHash:
+.PP
+.RS
+.B twinline dedupe \-\-minhash \-\-threshold=0.8 big.log \-o clean.log
+.RE
+.PP
+A colourful report of the clusters:
+.PP
+.RS
+.B twinline export notes.txt report.html
+.RE
+.SH SEE ALSO
+Full documentation: https://github.com/yusuffeness/TwinLine
+.SH AUTHOR
+Yusuf Enes K\[u00FC]t\[u00FC]k.

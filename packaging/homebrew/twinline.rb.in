@@ -1,0 +1,30 @@
+# Homebrew formula for TwinLine. The release workflow fills in @VERSION@ and
+# @SHA256@ and attaches the result to the GitHub release as twinline.rb; it
+# belongs in the tap repository yusuffeness/homebrew-twinline (Formula/).
+class Twinline < Formula
+  desc "Concurrent terminal editor that finds the lines that look alike"
+  homepage "https://github.com/yusuffeness/TwinLine"
+  url "https://github.com/yusuffeness/TwinLine/archive/refs/tags/v@VERSION@.tar.gz"
+  sha256 "@SHA256@"
+  license "MIT"
+  head "https://github.com/yusuffeness/TwinLine.git", branch: "main"
+
+  depends_on "cmake" => :build
+
+  def install
+    system "cmake", "-S", ".", "-B", "build",
+           "-DTWINLINE_BUILD_TESTS=OFF",
+           "-DTWINLINE_BUILD_BENCHMARKS=OFF",
+           "-DTWINLINE_WARNINGS_AS_ERRORS=OFF",
+           *std_cmake_args
+    system "cmake", "--build", "build"
+    system "cmake", "--install", "build"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/twinline --version")
+    (testpath/"notes.txt").write "the quick brown fox\nThe quick brown fox!\nsomething else\n"
+    output = shell_output("#{bin}/twinline dedupe --no-config notes.txt 2>&1")
+    assert_match "Removed 1 line", output
+  end
+end

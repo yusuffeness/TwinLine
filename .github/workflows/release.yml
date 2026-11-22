@@ -1,0 +1,208 @@
+# Publishes a release when a version tag is pushed:
+#
+#   git tag -a v1.2.3 -m "TwinLine v1.2.3" && git push origin v1.2.3
+#
+# 1. Checks that the tag matches the version in CMakeLists.txt.
+# 2. Builds and tests TwinLine on Linux (x86_64, arm64) and macOS (arm64,
+#    x86_64), and packs a .tar.gz for each and a .deb for Linux.
+# 3. Creates the GitHub release with the CHANGELOG section as its notes, the
+#    packages and SHA256SUMS.
+# 4. Pushes a multi-architecture image to ghcr.io/<owner>/twinline.
+# 5. Attaches a filled-in Homebrew formula, and commits it to the tap
+#    repository when the HOMEBREW_TAP_TOKEN secret is set.
+
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check the version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare the tag with CMakeLists.txt and CHANGELOG.md
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          project=$(sed -n '/^project(/,/)/s/^ *VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "$tag" != "$project" ]; then
+            echo "::error::Tag v$tag does not match the project version $project"
+            exit 1
+          fi
+          python3 scripts/release_notes.py "$tag" > /dev/null
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: ubuntu-22.04, target: linux-x86_64, deb: true }
+          - { os: ubuntu-22.04-arm, target: linux-arm64, deb: true }
+          - { os: macos-15, target: macos-arm64, deb: false }
+          - { os: macos-15-intel, target: macos-x86_64, deb: false }
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+                -DTWINLINE_BUILD_BENCHMARKS=OFF
+          cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --parallel 4
+
+      - name: Pack the archive
+        run: |
+          name="twinline-$VERSION-${{ matrix.target }}"
+          DESTDIR="$PWD/stage" cmake --install build --strip
+          mkdir -p "dist/$name"
+          cp stage/usr/bin/twinline "dist/$name/"
+          cp stage/usr/share/man/man1/twinline.1 README.md CHANGELOG.md LICENSE \
+             docs/CONFIGURATION.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          rm -r "dist/$name"
+          "stage/usr/bin/twinline" --version
+
+      - name: Pack the Debian package
+        if: matrix.deb
+        run: |
+          (cd build && cpack -G DEB)
+          mv build/*.deb dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    needs: [check, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create the release
+        run: |
+          python3 scripts/release_notes.py "$VERSION" > notes.md
+          {
+            echo
+            echo "### Install"
+            echo
+            echo '```sh'
+            echo "brew install yusuffeness/twinline/twinline        # macOS and Linux"
+            echo "sudo apt install ./twinline_${VERSION}_amd64.deb   # Debian, Ubuntu"
+            echo "docker run --rm -it -v \"\$PWD\":/work ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/twinline"
+            echo '```'
+            echo
+            echo "Verify a download with \`sha256sum -c SHA256SUMS --ignore-missing\`."
+          } >> notes.md
+          gh release create "v$VERSION" dist/* --title "TwinLine $VERSION" --notes-file notes.md
+
+  docker:
+    name: Container image
+    needs: [check, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/twinline
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  homebrew:
+    name: Homebrew formula
+    needs: [check, release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fill in the formula
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/v${VERSION}.tar.gz"
+          sha=$(curl -fsSL "$url" | sha256sum | cut -d' ' -f1)
+          python3 scripts/homebrew_formula.py "$VERSION" "$sha" > twinline.rb
+          cat twinline.rb
+          gh release upload "v$VERSION" twinline.rb
+
+      - name: Update the tap
+        if: env.TAP_TOKEN != ''
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${GITHUB_REPOSITORY_OWNER}/homebrew-twinline.git" tap
+          mkdir -p tap/Formula
+          cp twinline.rb tap/Formula/twinline.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/twinline.rb
+          git commit -m "twinline $VERSION"
+          git push

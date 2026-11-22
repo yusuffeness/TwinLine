@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
   TwinLine
-  VERSION 0.9.0
+  VERSION 1.0.0
   DESCRIPTION "A concurrent terminal editor that finds the lines that look alike"
   HOMEPAGE_URL "https://github.com/yusuffeness/TwinLine"
   LANGUAGES C)
@@ -176,5 +176,30 @@ endif()
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
+set(CMAKE_INSTALL_DOCDIR "share/doc/twinline" CACHE PATH "Documentation directory")
 include(GNUInstallDirs)
 install(TARGETS twinline RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES man/twinline.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+install(FILES README.md CHANGELOG.md LICENSE docs/CONFIGURATION.md
+        DESTINATION ${CMAKE_INSTALL_DOCDIR})
+
+# ---------------------------------------------------------------------------
+# Packages: `cpack -G DEB` (Debian/Ubuntu) and `cpack -G TGZ` from a build dir
+# ---------------------------------------------------------------------------
+set(CPACK_PACKAGE_NAME "twinline")
+set(CPACK_PACKAGE_VENDOR "Yusuf Enes Kutuk")
+set(CPACK_PACKAGE_CONTACT "Yusuf Enes Kutuk <https://github.com/yusuffeness>")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
+string(CONCAT CPACK_PACKAGE_DESCRIPTION
+       "TwinLine is a line-based terminal editor with a built-in near-duplicate detector. "
+       "It finds identical and nearly identical lines with an exact parallel Jaccard search "
+       "or MinHash for large files, groups them into clusters and removes the copies, "
+       "interactively or from scripts.")
+set(CPACK_PACKAGE_HOMEPAGE_URL "${PROJECT_HOMEPAGE_URL}")
+set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_FILE_NAME "twinline-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_STRIP_FILES ON)
+set(CPACK_DEBIAN_PACKAGE_SECTION "editors")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+include(CPack)

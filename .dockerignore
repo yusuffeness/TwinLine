@@ -1,0 +1,11 @@
+# Only the sources are needed to build the image.
+*
+!CMakeLists.txt
+!cmake/
+!include/
+!src/
+!man/
+!README.md
+!CHANGELOG.md
+!LICENSE
+!docs/CONFIGURATION.md
