@@ -237,6 +237,21 @@ void tw_services_tick(tw_app *app, bool force_autosave)
 
 /* ---------------------------------------------------------------- thread */
 
+/* Empties a non-blocking descriptor (the wake pipe or inotify): only the
+ * wake-up matters, not what was read. */
+static void drain(int fd)
+{
+    char buf[4096];
+    for (;;) {
+        ssize_t n = read(fd, buf, sizeof buf);
+        if (n > 0)
+            continue;
+        if (n < 0 && errno == EINTR)
+            continue;
+        break; /* empty (EAGAIN), closed or failed */
+    }
+}
+
 static void *services_main(void *arg)
 {
     tw_app *app = arg;
@@ -255,11 +270,10 @@ static void *services_main(void *arg)
             struct pollfd fds[2] = {{sv->wake_pipe[0], POLLIN, 0}, {sv->inotify_fd, POLLIN, 0}};
             nfds_t n = sv->inotify_fd >= 0 ? 2 : 1;
             if (poll(fds, n, TICK_MS) > 0) {
-                char drain[4096];
                 if (fds[0].revents & POLLIN)
-                    (void)read(sv->wake_pipe[0], drain, sizeof drain);
+                    drain(sv->wake_pipe[0]);
                 if (n == 2 && (fds[1].revents & POLLIN))
-                    (void)read(sv->inotify_fd, drain, sizeof drain);
+                    drain(sv->inotify_fd);
             }
         } else {
             struct timespec until;
@@ -342,8 +356,12 @@ void tw_app_stop_services(tw_app *app, bool clean_exit)
         sv->stop = true;
         pthread_cond_signal(&sv->wake);
         pthread_mutex_unlock(&sv->lock);
-        if (sv->wake_pipe[1] >= 0)
-            (void)write(sv->wake_pipe[1], "x", 1);
+        if (sv->wake_pipe[1] >= 0) {
+            /* If the pipe is full a wake-up is already pending; the thread
+             * also sees `stop` within a second, so a failed write is fine. */
+            ssize_t written = write(sv->wake_pipe[1], "x", 1);
+            (void)written;
+        }
         pthread_join(sv->thread, NULL);
         sv->running = false;
         if (sv->inotify_fd >= 0)
