@@ -45,11 +45,20 @@ tested under sanitizers, fuzzing and static analysis on every change.
 
 ## Install
 
-**Homebrew** (macOS and Linux):
+**macOS and Linux**: download the archive for your machine from the
+[latest release](https://github.com/yusuffeness/TwinLine/releases/latest)
+(`macos-arm64` for Apple silicon, `macos-x86_64` for Intel Macs,
+`linux-x86_64` or `linux-arm64`), then
 
 ```sh
-brew install yusuffeness/twinline/twinline
+tar -xzf twinline-*.tar.gz
+sudo mkdir -p /usr/local/bin /usr/local/share/man/man1
+sudo install twinline-*/twinline /usr/local/bin/
+sudo install -m 644 twinline-*/twinline.1 /usr/local/share/man/man1/
 ```
+
+The binaries are not signed: if macOS refuses to open one downloaded with a
+browser, run `xattr -d com.apple.quarantine /usr/local/bin/twinline` once.
 
 **Debian and Ubuntu**: download the `.deb` for your machine from the
 [latest release](https://github.com/yusuffeness/TwinLine/releases/latest), then
@@ -65,8 +74,8 @@ docker run --rm -it -v "$PWD":/work ghcr.io/yusuffeness/twinline notes.txt
 docker run --rm -v "$PWD":/work ghcr.io/yusuffeness/twinline analyze notes.txt
 ```
 
-**Release archives** for Linux (x86_64, arm64) and macOS (arm64, x86_64), with
-`SHA256SUMS`, are on the [releases page](https://github.com/yusuffeness/TwinLine/releases).
+Every release lists `SHA256SUMS` to check the downloads against, and a
+Homebrew formula (`twinline.rb`) for anyone who keeps a tap.
 [Building from source](#building-from-source) takes a C compiler and CMake.
 
 ## Quick start
@@ -406,7 +415,7 @@ src/                core, analysis, cmd (commands, scripting, services), tui
 tests/              Unit, golden-file integration, terminal UI and fuzz tests
 bench/              Speed, load and MinHash accuracy benchmarks
 man/                The man page, twinline(1)
-packaging/          The Homebrew formula template
+packaging/          The Homebrew formula template (attached to each release)
 scripts/            Corpus generator, demo recorder, release helpers
 docs/               Architecture, algorithms, configuration, testing, ADRs
 .github/            CI, release, CodeQL, issue and pull request templates

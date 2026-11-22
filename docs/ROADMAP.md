@@ -107,7 +107,7 @@ tagged release and left the repository in a working, presentable state.
 ## Milestone 9 - Launch (v1.0.0)
 
 - [x] Release binaries for Linux and macOS
-- [x] Homebrew tap, Debian package and Docker image
+- [x] Homebrew formula, Debian package and Docker image
 - [x] Man page
 - [x] Architecture, algorithm and configuration docs
 - [x] Logo and demo GIF

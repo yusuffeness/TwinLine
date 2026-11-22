@@ -1,6 +1,7 @@
 # Homebrew formula for TwinLine. The release workflow fills in @VERSION@ and
-# @SHA256@ and attaches the result to the GitHub release as twinline.rb; it
-# belongs in the tap repository yusuffeness/homebrew-twinline (Formula/).
+# @SHA256@ and attaches the result to the GitHub release as twinline.rb. To
+# offer `brew install`, put it in a tap repository named homebrew-twinline,
+# as Formula/twinline.rb.
 class Twinline < Formula
   desc "Concurrent terminal editor that finds the lines that look alike"
   homepage "https://github.com/yusuffeness/TwinLine"

@@ -8,8 +8,8 @@
 # 3. Creates the GitHub release with the CHANGELOG section as its notes, the
 #    packages and SHA256SUMS.
 # 4. Pushes a multi-architecture image to ghcr.io/<owner>/twinline.
-# 5. Attaches a filled-in Homebrew formula, and commits it to the tap
-#    repository when the HOMEBREW_TAP_TOKEN secret is set.
+# 5. Attaches a filled-in Homebrew formula; when the HOMEBREW_TAP_TOKEN secret
+#    is set, also commits it to the tap repository <owner>/homebrew-twinline.
 
 name: Release
 
@@ -127,8 +127,8 @@ jobs:
             echo "### Install"
             echo
             echo '```sh'
-            echo "brew install yusuffeness/twinline/twinline        # macOS and Linux"
             echo "sudo apt install ./twinline_${VERSION}_amd64.deb   # Debian, Ubuntu"
+            echo "tar -xzf twinline-${VERSION}-macos-arm64.tar.gz    # macOS, Linux: then copy twinline to your PATH"
             echo "docker run --rm -it -v \"\$PWD\":/work ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/twinline"
             echo '```'
             echo

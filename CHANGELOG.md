@@ -20,8 +20,8 @@ The first stable release: everything from the 0.x series, packaged.
   project version.
 - A container image on GitHub Container Registry for linux/amd64 and
   linux/arm64 (`ghcr.io/yusuffeness/twinline`).
-- A Homebrew formula, attached to every release and committed to the tap
-  `yusuffeness/homebrew-twinline` when a token is configured.
+- A Homebrew formula, attached to every release (and committed to a tap
+  repository when the `HOMEBREW_TAP_TOKEN` secret is set).
 - `make install` also installs the man page and documentation, and
   `make package` builds the `.deb` and `.tar.gz` packages (CPack).
 - The man page `twinline(1)`.
