@@ -11,7 +11,7 @@ make test        # or: ctest --test-dir build --output-on-failure
 | Unit | `tests/unit/` | Each module in isolation: UTF-8 decoding and folding, feature sets, documents, file I/O, the analysis, the background job, and the terminal UI (keys, line editing, completion, canvas, widgets) |
 | Integration | `tests/integration/cases/` | The real `twinline` binary, driven through standard input and compared with golden files |
 | Terminal UI | `tests/integration/tui_smoke.py` | The interactive UI in a pseudo-terminal: keys are typed and the screen is checked |
-| Fuzz | `tests/fuzz/` | Invariants of the UTF-8 decoder, the tokenizer and the command parser under random input |
+| Fuzz | `tests/fuzz/` | Invariants of the UTF-8 decoder, the tokenizer, the command parser and the configuration reader under random input |
 | Dynamic analysis | CI | AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer and Valgrind over the whole suite |
 
 Tests carry CTest labels, so a subset can be run on its own:
@@ -58,9 +58,15 @@ cases/edit_and_save/
     └── files/             files that must exist afterwards, byte for byte
 ```
 
-Every scenario runs in a fresh temporary directory. Timings such as
-`Finished in 0.012 s` and the version number are normalised before comparison. New cases are picked up
-automatically when CMake is re-run.
+Every scenario runs in a fresh temporary directory. Timings (`Finished in
+0.012 s`, `"seconds"` in JSON), the version number and the path of the
+temporary directory are normalised before comparison. `TWINLINE_CONFIG`
+points at `config.toml` in that directory, so your own configuration never
+changes a result and a case can bring its own as a fixture. New cases are
+picked up automatically when CMake is re-run.
+
+`--update` rewrites `stdout.txt`, `stderr.txt` and `exit.txt`; files under
+`expected/files/` are written by hand (copy them from a run you checked).
 
 To create or refresh the golden files after an intentional change, run the
 case with `--update` and review the diff before committing:

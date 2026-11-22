@@ -98,11 +98,11 @@ and leaves the repository in a working, presentable state.
 
 ## Milestone 8 - Services and scripting (v0.9.0)
 
-- [ ] Autosave and crash recovery
-- [ ] File watching
-- [ ] TOML configuration
-- [ ] Subcommands and flags
-- [ ] JSON output and exit codes
+- [x] Autosave and crash recovery
+- [x] File watching
+- [x] TOML configuration
+- [x] Subcommands and flags
+- [x] JSON output and exit codes
 
 ## Milestone 9 - Launch (v1.0.0)
 

@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-22
+
+### Added
+
+- Scripting mode: `twinline analyze`, `clusters`, `dedupe` and `export`
+  work on a file or on standard input (`-`) without the editor, and
+  `twinline config` prints the settings in effect as TOML. Every subcommand
+  has `--help`.
+- `--json` for `analyze` and `clusters`, with the full text of the most
+  similar pair and `null` for what a strategy does not compute.
+- `dedupe -o FILE` and `dedupe --in-place` write atomically; without them the
+  result goes to standard output and a summary to standard error (`-q`
+  silences it).
+- Exit codes: 0 success or nothing similar, 1 similar lines found, 2 usage
+  or configuration error, 3 file error, 4 anything else.
+- `config.toml` at `$TWINLINE_CONFIG`, `$XDG_CONFIG_HOME/twinline/` or
+  `~/.config/twinline/`, with `--config=FILE` and `--no-config`. Unknown
+  keys, wrong types and values out of range are reported with their line.
+  See `docs/CONFIGURATION.md`.
+- Autosave: unsaved changes are written every 30 seconds to a recovery file
+  next to the original (mode 0600), removed when the buffer is saved or
+  TwinLine quits normally. After a crash, `open` offers the changes and
+  `recover` loads them as one edit; `recover discard` deletes them.
+- File watching: a change or deletion by another program is reported once
+  (immediately on Linux with inotify, within a second elsewhere), and
+  `reload[!]` loads the new version as one undoable edit.
+- `set autosave N|off` and `set watch on|off`.
+- In the terminal UI, autosaves are shown as toasts.
+- A fuzz target for the configuration reader, in CI with the others.
+- Unit tests for the configuration, recovery files and the services;
+  integration tests for every subcommand, the exit codes and the
+  configuration file.
+
+### Changed
+
+- `-t N` is accepted as short for `--threads=N`.
+- Integration tests never read the user's configuration file.
+
 ## [0.8.0] - 2026-11-22
 
 ### Added
@@ -268,7 +306,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.clang-format` and `.clang-tidy`.
 - MIT license, README and roadmap.
 
-[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/yusuffeness/TwinLine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/yusuffeness/TwinLine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/yusuffeness/TwinLine/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/yusuffeness/TwinLine/compare/v0.5.0...v0.6.0

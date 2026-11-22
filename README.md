@@ -7,7 +7,7 @@
 [![CI](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml/badge.svg)](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/yusuffeness/TwinLine/graph/badge.svg)](https://codecov.io/gh/yusuffeness/TwinLine)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Version](https://img.shields.io/badge/version-0.8.0-blueviolet)
+![Version](https://img.shields.io/badge/version-0.9.0-blueviolet)
 ![Language](https://img.shields.io/badge/language-C17-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -16,11 +16,11 @@
 ---
 
 > [!NOTE]
-> TwinLine is under active development. v0.8.0 adds advanced analysis:
-> three strategies (exact Jaccard, identical lines only, and MinHash + LSH
-> for large files), clusters of similar lines, one-step de-duplication with
-> undo, runtime settings, and JSON, CSV and HTML reports. Services, a config
-> file and a scripting mode arrive in v0.9.0. Follow the
+> TwinLine is under active development. v0.9.0 makes it a tool for scripts
+> and a safe place to work: `twinline analyze | clusters | dedupe | export`
+> with JSON output and meaningful exit codes, a `config.toml`, autosave with
+> crash recovery, and notices when another program changes an open file.
+> Packaging and the 1.0 launch come next. Follow the
 > [roadmap](docs/ROADMAP.md) to see what is next.
 
 ## What is TwinLine?
@@ -101,6 +101,8 @@ the `/` is optional in the plain interface.
 | Command          | Description                                                  |
 | ---------------- | ------------------------------------------------------------ |
 | `open[!] FILE`   | Load a file (`open!` discards unsaved changes)               |
+| `reload[!]`      | Load the file again after another program changed it         |
+| `recover [discard]` | Restore (or delete) the changes autosaved before a crash  |
 | `save [FILE]`    | Save atomically to `FILE` or to the current file             |
 | `new [FILE]`     | Open a new buffer, empty or with `FILE`                      |
 | `buffers`        | List the open buffers                                        |
@@ -138,7 +140,7 @@ the `/` is optional in the plain interface.
 | `clusters [N]`   | Group the similar lines into clusters, or show cluster `N` with each line's similarity |
 | `dedupe [N [K]]` | Keep the first line of every cluster, or of cluster `N` (or its `K`-th line); one `undo` restores everything |
 | `export FILE`    | Save the clusters as `.json`, `.csv` or a colourful `.html` report |
-| `set [NAME VALUE]` | Show or change the settings: `threshold`, `threads`, `strategy`, `exhaustive`, `fold`, `ngram` |
+| `set [NAME VALUE]` | Show or change the settings: `threshold`, `threads`, `strategy`, `exhaustive`, `fold`, `ngram`, `autosave` (seconds or `off`), `watch` (`on`/`off`) |
 | `help`           | List the commands                                            |
 | `quit[!]`        | Exit; asks again when any buffer has unsaved changes         |
 
@@ -178,6 +180,7 @@ Command-line options:
 | `--no-color` | No colours (the `NO_COLOR` environment variable works too) |
 | `--no-animation` | No animations: still frames, progress updated 4 times a second (`TWINLINE_REDUCE_MOTION=1` works too) |
 | `--plain` | The plain line interface, as used when input is piped |
+| `--config=FILE`, `--no-config` | Read another configuration file, or none |
 
 ### Keyboard
 
@@ -221,6 +224,79 @@ so you can keep editing. Clusters join lines that are similar directly or
 through other lines (union-find). Details:
 [docs/ALGORITHMS.md](docs/ALGORITHMS.md).
 
+## Scripting
+
+Every analysis also runs without the editor, for scripts, pipelines and CI:
+
+```sh
+twinline analyze notes.txt                  # report; exit 1 if anything is similar
+twinline analyze --json --minhash big.txt   # the same as JSON, for large files
+twinline clusters --threshold=0.6 notes.txt # every cluster with its lines
+twinline dedupe notes.txt -o clean.txt      # keep one line per cluster
+twinline dedupe --in-place notes.txt        # ... or rewrite the file (atomically)
+cat log.txt | twinline dedupe - > unique.txt
+twinline export notes.txt report.html       # .json, .csv or .html
+twinline config                             # the settings in effect, as TOML
+```
+
+`-` reads standard input. Each subcommand takes the analysis options above
+and has its own `--help`.
+
+| Exit code | Meaning |
+| --------- | ------- |
+| 0 | Success; `analyze` and `clusters` found nothing similar |
+| 1 | `analyze` and `clusters` found identical or near-duplicate lines |
+| 2 | Bad command line or configuration file |
+| 3 | A file could not be read or written |
+| 4 | Anything else (out of memory) |
+
+So `twinline analyze docs/*.txt || echo "duplicates found"` works as a check,
+and `--json` output is stable for other programs to read.
+
+## Configuration
+
+Settings live in `~/.config/twinline/config.toml` (or under
+`$XDG_CONFIG_HOME`, or wherever `TWINLINE_CONFIG` points). Command-line
+options win over the file, the file over the defaults:
+
+```toml
+[analysis]
+threshold = 0.75
+strategy  = "jaccard"   # jaccard, exact or minhash
+ngram     = 2
+
+[ui]
+theme      = "nord"
+animations = true
+
+[autosave]
+interval = 30           # seconds
+
+[watch]
+enabled = true
+```
+
+`twinline config > ~/.config/twinline/config.toml` writes a complete file to
+start from. A mistake is reported with its line (`config.toml:3: unknown key
+'treshold' in [analysis]`) instead of being ignored. Every key is described
+in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+## Safety
+
+- **Autosave and crash recovery.** Every 30 seconds, unsaved changes are
+  written to a recovery file next to the original (`.notes.txt.twinline.swp`,
+  readable only by you). Saving or quitting normally removes it. If TwinLine
+  is killed or the machine stops, the next `open` says so; `recover` loads
+  the changes as one edit (`undo` returns to the file on disk) and
+  `recover discard` deletes them.
+- **Watching files.** When another program changes or deletes an open file,
+  TwinLine says so once; `reload` loads the new version (as one edit, so
+  `undo` brings yours back). Its own saves never trigger the notice. On Linux
+  the folders are watched with inotify, so the notice is immediate; other
+  systems check once a second.
+- **Atomic saves.** Files are written to a temporary file and renamed, so a
+  crash never leaves half a file.
+
 ## Performance
 
 ![Benchmark: analysis time and speed-up by number of threads](docs/assets/benchmark.png)
@@ -255,8 +331,7 @@ of 0.105 s (1.7x); `bench_load FILE` measures it on your machine.
 ## Planned features
 
 - **Side-by-side view** of all near-duplicate pairs.
-- **Scriptable mode** with JSON output and meaningful exit codes.
-- Autosave with crash recovery, file watching, themes and a TOML config file.
+- Packages for Homebrew and Debian, a container image, a man page and a demo.
 
 ## Building from source
 
