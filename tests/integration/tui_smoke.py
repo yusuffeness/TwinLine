@@ -203,6 +203,15 @@ def session_two(argv: list[str], tmp: str) -> None:
     s.send("/clusters\r")
     s.read_until("No similar lines (strategy minhash")
 
+    # Control characters in a document are shown, never sent to the terminal.
+    with open(os.path.join(tmp, "esc.txt"), "w", encoding="utf-8") as f:
+        f.write("clear\x1b[2Jscreen and ring\x07\n")
+    s.send("/open! esc.txt\r")
+    s.read_until("Opened 'esc.txt'")
+    s.send("/show\r")
+    s.read_until("clear^[[2Jscreen and ring^G")
+    assert b"clear\x1b[2J" not in s.raw, "an escape sequence from the document reached the terminal"
+
     s.send("/new\r")                 # a second buffer shows in the status bar
     s.read_until("Buffer 2: new empty document.")
     s.read_until("(untitled) [2/2]")

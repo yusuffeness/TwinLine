@@ -438,22 +438,60 @@ static void show_toast(tw_ui *ui, tw_toast_kind kind, const char *text)
 
 /* ---------------------------------------------------------- formatting */
 
+/* True for C0 and C1 control characters other than the tab. Printed raw,
+ * they would reach the terminal as commands: a document must never be able
+ * to move the cursor, change colours or set the window title. */
+static bool is_control(uint32_t cp)
+{
+    return (cp < 0x20 && cp != '\t') || (cp >= 0x7F && cp < 0xA0);
+}
+
 /* Appends `len` bytes of `text`, drawing the TW_MARK_ON ... TW_MARK_OFF
- * spans (search matches, the goto line) as highlighted. */
+ * spans (search matches, the goto line) as highlighted and control
+ * characters in caret notation (^[ for ESC), as `cat -v` does. */
 static void append_marked(tw_ui *ui, tw_strbuf *sb, const char *text, size_t len)
 {
     tw_style mark = tw_style_fg(tw_rgb_hex(0x111118), TW_STYLE_BOLD | TW_STYLE_BG);
     mark.bg = ui->theme->accent2;
+    bool marked = false;
     size_t start = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (text[i] != TW_MARK_ON[0] && text[i] != TW_MARK_OFF[0])
+    size_t i = 0;
+    while (i < len) {
+        char c = text[i];
+        if (c == TW_MARK_ON[0] || c == TW_MARK_OFF[0]) {
+            tw_strbuf_append_n(sb, text + start, i - start);
+            marked = c == TW_MARK_ON[0];
+            if (marked)
+                tw_style_render(mark, ui->color, sb);
+            else
+                tw_strbuf_append(sb, RESET);
+            start = ++i;
             continue;
+        }
+        uint32_t cp = 0;
+        size_t n =
+            (unsigned char)c < 0x80 ? 1 : tw_utf8_decode((const unsigned char *)text + i, &cp);
+        if (n == 1)
+            cp = (unsigned char)c;
+        if (i + n > len)
+            n = len - i;
+        if (!is_control(cp)) {
+            i += n;
+            continue;
+        }
         tw_strbuf_append_n(sb, text + start, i - start);
-        if (text[i] == TW_MARK_ON[0])
-            tw_style_render(mark, ui->color, sb);
+        char caret[16];
+        if (cp < 0x20 || cp == 0x7F)
+            snprintf(caret, sizeof caret, "^%c", cp == 0x7F ? '?' : (char)(cp + 0x40));
         else
-            tw_strbuf_append(sb, RESET);
-        start = i + 1;
+            snprintf(caret, sizeof caret, "<%02X>", (unsigned)cp); /* C1 control */
+        style(ui, sb, ui->theme->muted, 0);
+        tw_strbuf_append(sb, caret);
+        tw_strbuf_append(sb, RESET);
+        if (marked)
+            tw_style_render(mark, ui->color, sb);
+        i += n;
+        start = i;
     }
     tw_strbuf_append_n(sb, text + start, len - start);
 }
