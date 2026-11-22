@@ -8,6 +8,7 @@ twinline> Commands:
   analyze-sync     Find near-duplicate lines and wait for the result
   cancel           Stop the running background analysis
   status           Show the file, unsaved changes and analysis progress
+  threads          Show the progress of each analysis thread
   help             Show this list
   quit[!]          Exit (quit! discards unsaved changes)
   exit[!]          Same as quit

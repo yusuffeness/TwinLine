@@ -153,12 +153,15 @@ def session_two(argv: list[str], tmp: str) -> None:
     with open(os.path.join(tmp, "data.txt"), "w", encoding="utf-8") as f:
         f.write("the server answered\nThe server answered!\nsomething else entirely\n")
 
-    s = Session([*argv, "--threads=2", "data.txt"], tmp)
+    s = Session([*argv, "--threads=2", "--no-animation", "data.txt"], tmp)
     s.read_until("Opened 'data.txt' (3 lines).")
 
+    s.send("/threads\r")            # per-thread progress panel
+    s.read_until("Thread panel on")
+
     s.send("/analyze\r")
-    s.read_until("Background analysis finished")
-    s.read_until("Identical pairs             : 1")
+    s.read_until("Analysis finished in")  # result card and toast
+    s.read_until("1 identical pairs")
 
     s.send("/op")
     s.read_until("/open")

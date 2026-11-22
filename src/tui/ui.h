@@ -19,6 +19,7 @@ typedef struct tw_ui_options {
     const tw_theme *theme;
     tw_color_mode color;
     const char *open_file; /* opened at start, may be NULL */
+    bool animate;          /* false for reduced motion */
 } tw_ui_options;
 
 /* True when standard input and output are both terminals. */

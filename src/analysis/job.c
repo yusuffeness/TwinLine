@@ -24,8 +24,7 @@ void tw_job_init(tw_analysis_job *job)
     job->joinable = false;
     atomic_init(&job->running, false);
     atomic_init(&job->cancel, false);
-    atomic_init(&job->progress.pairs_done, 0);
-    atomic_init(&job->progress.pairs_total, 0);
+    tw_analysis_progress_init(&job->progress);
     tw_document_init(&job->snapshot);
     tw_analysis_options_default(&job->options);
     job->on_done = NULL;

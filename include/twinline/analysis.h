@@ -51,19 +51,35 @@ typedef struct tw_analysis_result {
     double best_similarity;       /* highest J below 1, 0 if none */
     size_t best_a;                /* 1-based line numbers of that pair */
     size_t best_b;
-    char best_a_text[TW_SNIPPET_BYTES + 4];
-    char best_b_text[TW_SNIPPET_BYTES + 4];
+    char best_a_text[TW_SNIPPET_BYTES + 7]; /* "..." + snippet + "..." */
+    char best_b_text[TW_SNIPPET_BYTES + 7];
     double seconds; /* wall-clock duration */
 } tw_analysis_result;
+
+#define TW_PROGRESS_SLOTS 64 /* per-thread counters kept for progress displays */
 
 /* Live progress, readable from any thread while an analysis runs. */
 typedef struct tw_analysis_progress {
     atomic_ullong pairs_done;
     atomic_ullong pairs_total;
+    atomic_ullong start_ns;                       /* CLOCK_MONOTONIC time the analysis started */
+    atomic_size_t threads;                        /* worker threads of the running analysis */
+    atomic_ullong thread_done[TW_PROGRESS_SLOTS]; /* pairs done per worker */
 } tw_analysis_progress;
 
 void tw_analysis_options_default(tw_analysis_options *options);
+void tw_analysis_progress_init(tw_analysis_progress *progress);
 void tw_analysis_progress_reset(tw_analysis_progress *progress);
+
+/* Seconds since the analysis started (0 before it starts). */
+double tw_analysis_progress_elapsed(tw_analysis_progress *progress);
+
+/*
+ * Fills `fractions` with each worker's progress relative to an equal share
+ * of the work (capped at 1). Returns the number of workers reported, at most
+ * `max` and at most TW_PROGRESS_SLOTS.
+ */
+size_t tw_analysis_progress_threads(tw_analysis_progress *progress, double *fractions, size_t max);
 
 /* Number of worker threads `options` resolves to on this machine. */
 size_t tw_analysis_thread_count(const tw_analysis_options *options);

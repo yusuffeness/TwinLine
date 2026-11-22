@@ -7,7 +7,7 @@
 [![CI](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml/badge.svg)](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/yusuffeness/TwinLine/graph/badge.svg)](https://codecov.io/gh/yusuffeness/TwinLine)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Version](https://img.shields.io/badge/version-0.5.0-blueviolet)
+![Version](https://img.shields.io/badge/version-0.6.0-blueviolet)
 ![Language](https://img.shields.io/badge/language-C17-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -16,10 +16,11 @@
 ---
 
 > [!NOTE]
-> TwinLine is under active development. v0.5.0 adds the colourful terminal
-> UI on top of the parallel, exact near-duplicate analysis; animations and
-> live views arrive in v0.6.0. Follow the [roadmap](docs/ROADMAP.md) to see
-> what is next.
+> TwinLine is under active development. v0.6.0 brings the terminal UI to
+> life: a live progress view with per-thread bars, animated result cards with
+> a word diff, and toasts, all drawn by a render thread that sleeps when
+> nothing moves. Editing features arrive in v0.7.0. Follow the
+> [roadmap](docs/ROADMAP.md) to see what is next.
 
 ## What is TwinLine?
 
@@ -49,25 +50,45 @@ In a terminal, TwinLine opens its interactive UI:
 │     ██║   ██║███╗██║██║██║╚██╗██║██║     ██║██║╚██╗██║██╔══╝    │
 │     ██║   ╚███╔███╔╝██║██║ ╚████║███████╗██║██║ ╚████║███████╗  │
 │     ╚═╝    ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝  │
-│ ✻ Welcome to TwinLine v0.5.0                                    │
+│ ✻ Welcome to TwinLine v0.6.0                                    │
 │   /help for commands · ? for shortcuts · Tab to complete        │
 ╰─────────────────────────────────────────────────────────────────╯
 
+> /threads
+  ⎿ ✔ Thread panel on: each thread's progress is shown during analysis.
 > /analyze
-  ⎿ ✔ Analysing 16357 lines in the background. Use 'status' or 'cancel'.
-
- ✶ Analyzing… 41% · 16 threads · esc to cancel
+  ⎿ ✔ Analyzing 4662 lines in the background. Use 'status' or 'cancel'.
+ ✺ Analyzing… 0.4 s · 44% · 4.8M / 11M pairs · 2 threads · esc to cancel
+   █████████████████████▍░░░░░░░░░░░░░░░░░░░░░░░░░░  44%
+     T1  █████████████████▍░░░░░░░░░░░░░░░░░░░░  46%
+     T2  ████████████████▍░░░░░░░░░░░░░░░░░░░░░  43%
 ╭────────────────────────────────────────────────────────────────────╮
-│ > /sh                                                              │
+│ > Type a command, or / for the menu                                │
 ╰────────────────────────────────────────────────────────────────────╯
-   /show  Print the document with line numbers
- ▸ corpus-1MiB.txt · 16,357 lines · 16 threads · pruned
+ ▸ med.txt · 4,662 lines · 2 threads · exhaustive
+```
+
+When the analysis is done, its result card counts up into place and a toast
+confirms it:
+
+```text
+✔ Analysis finished in 1.04 s with 2 threads
+  ⎿ 4,662 lines · 10,864,791 line pairs · mean J 0.0242
+    ● 36 identical pairs    ● 40 near duplicates (J ≥ 0.70)
+    Most similar pair  J 0.86
+      917  ...disk started carefully!
+     1327  ...disk started task
 ```
 
 Output scrolls like any terminal program; only the input box, the command
 menu and the status bar at the bottom are redrawn in place. Results of a
 background analysis appear above the input box without disturbing what you
-are typing.
+are typing, and the words that differ in the most similar pair are
+highlighted (removed in red, added in green).
+
+A render thread draws at 30 frames per second while something moves and
+redraws only the rows that changed. When nothing moves it sleeps, so an idle
+TwinLine uses no CPU.
 
 ### Commands
 
@@ -84,6 +105,7 @@ the `/` is optional in the plain interface.
 | `analyze-sync`   | Same, but wait for the result                                |
 | `cancel`         | Stop the running analysis                                    |
 | `status`         | File, unsaved changes and analysis progress                  |
+| `threads`        | Toggle the per-thread progress panel                         |
 | `help`           | List the commands                                            |
 | `quit[!]`        | Exit; asks again when there are unsaved changes              |
 
@@ -96,6 +118,7 @@ Command-line options:
 | `--fold=turkish` | Fold `I` to dotless `ı` as in Turkish (default folds it to `i`) |
 | `--theme=NAME` | Colour theme: `dark` (default), `light`, `dracula`, `nord` |
 | `--no-color` | No colours (the `NO_COLOR` environment variable works too) |
+| `--no-animation` | No animations: still frames, progress updated 4 times a second (`TWINLINE_REDUCE_MOTION=1` works too) |
 | `--plain` | The plain line interface, as used when input is piped |
 
 ### Keyboard
@@ -151,14 +174,12 @@ Reproduce the chart on your machine with `make bench`.
 
 ## Planned features
 
-- **Colourful, animated terminal UI** inspired by modern CLI tools: bordered
-  boxes, a slash-command menu with fuzzy search, a live spinner and progress bar.
 - **Background analysis** that never blocks the editor: analysis runs on a
   snapshot of the document while you continue to edit.
 - **Parallel engine**: all-pairs Jaccard similarity split across worker
   threads, plus MinHash + LSH for very large files.
 - **Unicode-aware** tokenisation, including Turkish case folding.
-- **Side-by-side diff view** of near-duplicate lines, clustering and
+- **Side-by-side view** of all near-duplicate pairs, clustering and
   interactive de-duplication.
 - **Scriptable mode** with JSON output and meaningful exit codes.
 - Autosave with crash recovery, file watching, themes and a TOML config file.

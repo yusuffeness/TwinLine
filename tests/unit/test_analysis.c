@@ -94,8 +94,7 @@ TW_TEST(reports_progress)
     tw_analysis_options_default(&options);
 
     tw_analysis_progress progress;
-    atomic_init(&progress.pairs_done, 0);
-    atomic_init(&progress.pairs_total, 0);
+    tw_analysis_progress_init(&progress);
 
     tw_analysis_result r;
     TW_CHECK_EQ_INT(tw_analysis_run(&doc, &options, NULL, &progress, &r), TW_OK);
@@ -103,6 +102,15 @@ TW_TEST(reports_progress)
     TW_CHECK_EQ_SIZE(atomic_load(&progress.pairs_total), 6);
     TW_CHECK_EQ_SIZE(atomic_load(&progress.pairs_done), 6);
     TW_CHECK_NEAR(tw_analysis_progress_fraction(&progress), 1.0, 1e-12);
+    TW_CHECK(tw_analysis_progress_elapsed(&progress) > 0.0);
+
+    double fractions[4] = {0, 0, 0, 0};
+    size_t reported = tw_analysis_progress_threads(&progress, fractions, 4);
+    TW_CHECK(reported >= 1);
+    double sum = 0.0;
+    for (size_t t = 0; t < reported; t++)
+        sum += fractions[t];
+    TW_CHECK(sum > 0.0);
 
     tw_analysis_progress_reset(&progress);
     TW_CHECK_NEAR(tw_analysis_progress_fraction(&progress), 0.0, 1e-12);
@@ -149,10 +157,29 @@ TW_TEST(long_lines_are_shortened_in_the_report)
     tw_document_free(&doc);
 
     size_t len = strlen(r.best_a_text);
-    TW_CHECK(len <= TW_SNIPPET_BYTES + 3);
+    TW_CHECK(len <= TW_SNIPPET_BYTES + 6);
     TW_CHECK(strcmp(r.best_a_text + len - 3, "...") == 0);
     /* The cut falls inside the two-byte letter, so it must be dropped whole. */
     TW_CHECK_EQ_SIZE(len - 3, 69);
+}
+
+/* When two long lines differ late, both snippets start near the difference. */
+TW_TEST(snippets_start_near_the_difference)
+{
+    const char *const pair[] = {
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi first tail",
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi second tail",
+    };
+    tw_document doc;
+    TW_CHECK(make_document(&doc, pair, 2));
+    tw_analysis_options options;
+    tw_analysis_options_default(&options);
+    tw_analysis_result r;
+    TW_CHECK_EQ_INT(tw_analysis_run(&doc, &options, NULL, NULL, &r), TW_OK);
+    tw_document_free(&doc);
+
+    TW_CHECK_EQ_STR(r.best_a_text, "...nu xi first tail");
+    TW_CHECK_EQ_STR(r.best_b_text, "...nu xi second tail");
 }
 
 int main(void)
@@ -164,5 +191,6 @@ int main(void)
     TW_RUN(reports_progress);
     TW_RUN(honours_cancellation);
     TW_RUN(long_lines_are_shortened_in_the_report);
+    TW_RUN(snippets_start_near_the_difference);
     return tw_test_summary();
 }

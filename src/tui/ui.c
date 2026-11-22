@@ -40,6 +40,13 @@ typedef enum menu_kind {
     MENU_FILES,
 } menu_kind;
 
+#define INTRO_SECONDS      1.6        /* light sweeping over the logo at start */
+#define CARD_SECONDS       0.9        /* numbers of a result card counting up */
+#define FRAME_SECONDS      (1.0 / 30) /* animation frame rate */
+#define SLOW_FRAME_SECONDS 0.25       /* progress refresh rate without animation */
+
+/* Fields are grouped by meaning; there is one per screen, so padding is cheap. */
+// NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding)
 typedef struct tw_ui {
     tw_app *app;
     const tw_theme *theme;
@@ -71,13 +78,34 @@ typedef struct tw_ui {
     double ctrl_c_time;
     bool in_paste;
 
+    /* Terminal state of the live region. */
     bool live_drawn;
     int live_cursor_row;
+    tw_canvas prev; /* what the live region shows now, for row-by-row updates */
+    bool prev_valid;
     bool closing;
     bool quit;
-    bool was_busy;
-    int last_percent;
     tw_strbuf out;
+
+    /* Animation. */
+    bool animate;
+    double start_time;
+    pthread_t render_thread;
+    bool render_started;
+    pthread_cond_t wake;
+    bool stopping;
+    char cwd[1024];
+    bool intro_active; /* the welcome banner is still in the live region */
+    double intro_start;
+    char *pending_open; /* file to open once the intro is over */
+    bool card_active;   /* a result card is counting up in the live region */
+    double card_start;
+    tw_analysis_result card;
+    char toast[96];
+    tw_toast_kind toast_kind;
+    double toast_start;
+    bool toast_active;
+    bool show_threads; /* /threads: per-thread progress bars */
 } tw_ui;
 
 static double now_seconds(void)
@@ -107,6 +135,14 @@ static void flush(tw_ui *ui)
     tw_strbuf_clear(&ui->out);
 }
 
+static void forget_live(tw_ui *ui)
+{
+    ui->live_drawn = false;
+    if (ui->prev_valid)
+        tw_canvas_free(&ui->prev);
+    ui->prev_valid = false;
+}
+
 static void erase_live(tw_ui *ui)
 {
     if (!ui->live_drawn)
@@ -115,11 +151,51 @@ static void erase_live(tw_ui *ui)
     if (ui->live_cursor_row > 0)
         tw_strbuf_appendf(&ui->out, "\x1b[%dA", ui->live_cursor_row);
     tw_strbuf_append(&ui->out, "\x1b[J");
-    ui->live_drawn = false;
+    forget_live(ui);
 }
 
-static void build_view(tw_ui *ui, tw_view *view, char *activity, size_t activity_size, char *title,
-                       size_t title_size, char *file, size_t file_size)
+/* Appends canvas rows as ANSI lines, each ending in a newline. */
+static void append_canvas(tw_ui *ui, tw_strbuf *sb, const tw_canvas *canvas)
+{
+    for (int y = 0; y < canvas->height; y++) {
+        tw_canvas_render_row(canvas, y, ui->color, sb);
+        tw_strbuf_append(sb, "\n");
+    }
+}
+
+static bool render_welcome(tw_ui *ui, double shine, tw_canvas *out)
+{
+    tw_welcome welcome = {ui->theme, ui->columns - 1, TWINLINE_VERSION, ui->cwd, shine};
+    return tw_welcome_render(&welcome, out);
+}
+
+static bool render_card(tw_ui *ui, double progress, tw_canvas *out)
+{
+    tw_result_card card = {ui->theme, ui->columns - 1, &ui->card, progress};
+    return tw_card_render(&card, out);
+}
+
+static void fill_activity(tw_analysis_progress *progress, const char *label, bool cancellable,
+                          bool cancelling, double *fractions, size_t max_threads, tw_activity *a)
+{
+    memset(a, 0, sizeof *a);
+    a->label = label;
+    a->elapsed = tw_analysis_progress_elapsed(progress);
+    a->fraction = tw_analysis_progress_fraction(progress);
+    a->done = atomic_load_explicit(&progress->pairs_done, memory_order_relaxed);
+    a->total = atomic_load_explicit(&progress->pairs_total, memory_order_relaxed);
+    a->threads = atomic_load_explicit(&progress->threads, memory_order_relaxed);
+    a->cancellable = cancellable;
+    a->cancelling = cancelling;
+    if (fractions != NULL) {
+        a->thread_count = tw_analysis_progress_threads(progress, fractions, max_threads);
+        a->thread_fractions = fractions;
+    }
+}
+
+static void build_view(tw_ui *ui, double now, tw_view *view, tw_activity *activity,
+                       double *fractions, char *title, size_t title_size, char *file,
+                       size_t file_size)
 {
     tw_app *app = ui->app;
     memset(view, 0, sizeof *view);
@@ -127,6 +203,8 @@ static void build_view(tw_ui *ui, tw_view *view, char *activity, size_t activity
     view->width = ui->columns - 1;
     view->input = ui->line.buf;
     view->cursor = ui->line.cursor;
+    view->time = now - ui->start_time;
+    view->animate = ui->animate;
 
     if (ui->searching) {
         snprintf(title, title_size, "%s: %s",
@@ -135,17 +213,23 @@ static void build_view(tw_ui *ui, tw_view *view, char *activity, size_t activity
         view->title = title;
     }
 
+    double *panel = ui->show_threads ? fractions : NULL;
     if (tw_job_is_running(&app->job)) {
+        fill_activity(&app->job.progress, "Analyzing", true, tw_job_is_cancelling(&app->job), panel,
+                      TW_PROGRESS_SLOTS, activity);
+        view->progress = activity;
         view->busy = true;
-        if (tw_job_is_cancelling(&app->job)) {
-            snprintf(activity, activity_size, "Cancelling the analysis…");
-        } else {
-            int percent = (int)(100.0 * tw_analysis_progress_fraction(&app->job.progress));
-            size_t threads = tw_analysis_thread_count(&app->options);
-            snprintf(activity, activity_size, "Analyzing… %d%% · %zu thread%s · esc to cancel",
-                     percent, threads, threads == 1 ? "" : "s");
-        }
-        view->activity = activity;
+    } else if (atomic_load(&app->sync_running)) {
+        fill_activity(&app->sync_progress, "Analyzing", false, false, panel, TW_PROGRESS_SLOTS,
+                      activity);
+        view->progress = activity;
+        view->busy = true;
+    }
+
+    if (ui->toast_active) {
+        view->toast = ui->toast;
+        view->toast_kind = ui->toast_kind;
+        view->toast_age = now - ui->toast_start;
     }
 
     if (ui->menu != MENU_NONE) {
@@ -169,54 +253,157 @@ static void build_view(tw_ui *ui, tw_view *view, char *activity, size_t activity
     view->turkish = app->options.fold == TW_FOLD_TURKISH;
 }
 
+/* Composes the whole live region: an optional header (the welcome banner
+ * during the intro, or a result card while it counts up) above the view. */
+static bool compose_live(tw_ui *ui, tw_canvas *out, int *cx, int *cy)
+{
+    double now = now_seconds();
+    char title[200];
+    char file[512];
+    double fractions[TW_PROGRESS_SLOTS];
+    tw_activity activity;
+    tw_view view;
+    build_view(ui, now, &view, &activity, fractions, title, sizeof title, file, sizeof file);
+
+    tw_canvas body;
+    if (!tw_view_render(&view, &body, cx, cy))
+        return false;
+
+    tw_canvas header;
+    bool has_header = false;
+    if (ui->intro_active) {
+        double t = (now - ui->intro_start) / INTRO_SECONDS;
+        has_header = render_welcome(ui, -12.0 + t * 90.0, &header);
+    } else if (ui->card_active) {
+        has_header = render_card(ui, (now - ui->card_start) / CARD_SECONDS, &header);
+    }
+    if (!has_header) {
+        *out = body;
+        return true;
+    }
+
+    int width = body.width > header.width ? body.width : header.width;
+    if (!tw_canvas_init(out, width, header.height + body.height)) {
+        tw_canvas_free(&header);
+        *out = body;
+        return true;
+    }
+    tw_canvas_blit(out, &header, 0, 0);
+    tw_canvas_blit(out, &body, 0, header.height);
+    *cy += header.height;
+    tw_canvas_free(&header);
+    tw_canvas_free(&body);
+    return true;
+}
+
+/* Moves the terminal cursor between rows of the live region. */
+static void move_rows(tw_ui *ui, int from, int to)
+{
+    if (to < from)
+        tw_strbuf_appendf(&ui->out, "\x1b[%dA", from - to);
+    else if (to > from)
+        tw_strbuf_appendf(&ui->out, "\x1b[%dB", to - from);
+}
+
+static void place_cursor(tw_ui *ui, int row_now, int cx, int cy)
+{
+    move_rows(ui, row_now, cy);
+    tw_strbuf_append(&ui->out, "\r");
+    if (cx > 0)
+        tw_strbuf_appendf(&ui->out, "\x1b[%dC", cx);
+    ui->live_cursor_row = cy;
+}
+
+/* Draws the live region at the cursor (which must be where it starts). */
+static void draw_live_full(tw_ui *ui, tw_canvas *canvas, int cx, int cy)
+{
+    for (int y = 0; y < canvas->height; y++) {
+        tw_canvas_render_row(canvas, y, ui->color, &ui->out);
+        if (y + 1 < canvas->height)
+            tw_strbuf_append(&ui->out, "\n");
+    }
+    place_cursor(ui, canvas->height - 1, cx, cy);
+    ui->live_drawn = true;
+    if (ui->prev_valid)
+        tw_canvas_free(&ui->prev);
+    ui->prev = *canvas;
+    ui->prev_valid = true;
+}
+
 static void draw_live(tw_ui *ui)
 {
     if (ui->closing)
         return;
-    char activity[160];
-    char title[200];
-    char file[512];
-    tw_view view;
-    build_view(ui, &view, activity, sizeof activity, title, sizeof title, file, sizeof file);
-
     tw_canvas canvas;
     int cx = 0;
     int cy = 0;
-    if (!tw_view_render(&view, &canvas, &cx, &cy))
+    if (!compose_live(ui, &canvas, &cx, &cy))
         return;
-
-    tw_strbuf row;
-    tw_strbuf_init(&row);
-    for (int y = 0; y < canvas.height; y++) {
-        tw_strbuf_clear(&row);
-        tw_canvas_render_row(&canvas, y, ui->color, &row);
-        tw_strbuf_append(&ui->out, tw_strbuf_str(&row));
-        if (y + 1 < canvas.height)
-            tw_strbuf_append(&ui->out, "\n");
-    }
-    tw_strbuf_free(&row);
-
-    /* Move from the end of the last row to the input cursor. */
-    int up = canvas.height - 1 - cy;
-    if (up > 0)
-        tw_strbuf_appendf(&ui->out, "\x1b[%dA", up);
-    tw_strbuf_append(&ui->out, "\r");
-    if (cx > 0)
-        tw_strbuf_appendf(&ui->out, "\x1b[%dC", cx);
-
-    ui->live_cursor_row = cy;
-    ui->live_drawn = true;
-    tw_canvas_free(&canvas);
+    draw_live_full(ui, &canvas, cx, cy);
 }
 
-/* Redraws the live region in place. Caller holds ui->lock. */
+/*
+ * Redraws the live region in place. When its size is unchanged only the rows
+ * that differ are rewritten, so a spinner frame costs one short row instead
+ * of the whole region. Caller holds ui->lock.
+ */
 static void refresh(tw_ui *ui)
 {
+    if (ui->closing)
+        return;
+    tw_canvas next;
+    int cx = 0;
+    int cy = 0;
+    if (!compose_live(ui, &next, &cx, &cy))
+        return;
+
     tw_strbuf_append(&ui->out, HIDE_CURSOR);
-    erase_live(ui);
-    draw_live(ui);
+    if (ui->live_drawn && ui->prev_valid && ui->prev.width == next.width &&
+        ui->prev.height == next.height) {
+        int row = ui->live_cursor_row;
+        for (int y = 0; y < next.height; y++) {
+            if (tw_canvas_row_equal(&ui->prev, &next, y))
+                continue;
+            move_rows(ui, row, y);
+            row = y;
+            tw_strbuf_append(&ui->out, "\r\x1b[2K");
+            tw_canvas_render_row(&next, y, ui->color, &ui->out);
+        }
+        place_cursor(ui, row, cx, cy);
+        tw_canvas_free(&ui->prev);
+        ui->prev = next;
+    } else {
+        erase_live(ui);
+        draw_live_full(ui, &next, cx, cy);
+    }
     tw_strbuf_append(&ui->out, SHOW_CURSOR);
     flush(ui);
+    pthread_cond_signal(&ui->wake); /* an animation may have started */
+}
+
+/* Moves a finished intro or card out of the live region into the scrollback. */
+static void commit_header(tw_ui *ui, tw_strbuf *sb)
+{
+    tw_canvas canvas;
+    if (ui->intro_active) {
+        ui->intro_active = false;
+        if (render_welcome(ui, -1.0, &canvas)) {
+            append_canvas(ui, sb, &canvas);
+            tw_canvas_free(&canvas);
+        }
+    }
+    if (ui->card_active) {
+        ui->card_active = false;
+        tw_strbuf_append(sb, "\n");
+        if (render_card(ui, 1.0, &canvas)) {
+            /* The card's first row is padding inside the live region. */
+            for (int y = 1; y < canvas.height; y++) {
+                tw_canvas_render_row(&canvas, y, ui->color, sb);
+                tw_strbuf_append(sb, "\n");
+            }
+            tw_canvas_free(&canvas);
+        }
+    }
 }
 
 /* Prints `text` (ANSI, ending in a newline) above the live region. */
@@ -224,10 +411,20 @@ static void print_above(tw_ui *ui, const char *text)
 {
     tw_strbuf_append(&ui->out, HIDE_CURSOR);
     erase_live(ui);
+    commit_header(ui, &ui->out); /* keep the scrollback in order */
     tw_strbuf_append(&ui->out, text);
     draw_live(ui);
     tw_strbuf_append(&ui->out, SHOW_CURSOR);
     flush(ui);
+    pthread_cond_signal(&ui->wake);
+}
+
+static void show_toast(tw_ui *ui, tw_toast_kind kind, const char *text)
+{
+    snprintf(ui->toast, sizeof ui->toast, "%s", text);
+    ui->toast_kind = kind;
+    ui->toast_start = now_seconds();
+    ui->toast_active = true;
 }
 
 /* ---------------------------------------------------------- formatting */
@@ -352,33 +549,31 @@ static void print_shortcuts(tw_ui *ui)
     tw_strbuf_free(&sb);
 }
 
-static void print_welcome(tw_ui *ui)
+static void compute_cwd(tw_ui *ui)
 {
     char cwd[1024];
-    char shown[1024];
     if (getcwd(cwd, sizeof cwd) == NULL)
         snprintf(cwd, sizeof cwd, ".");
     const char *home = getenv("HOME"); // NOLINT(concurrency-mt-unsafe): main thread only
     size_t home_len = home ? strlen(home) : 0;
     if (home_len > 1 && strncmp(cwd, home, home_len) == 0 &&
         (cwd[home_len] == '/' || cwd[home_len] == '\0'))
-        snprintf(shown, sizeof shown, "~%s", cwd + home_len);
+        snprintf(ui->cwd, sizeof ui->cwd, "~%s", cwd + home_len);
     else
-        snprintf(shown, sizeof shown, "%s", cwd);
+        snprintf(ui->cwd, sizeof ui->cwd, "%s", cwd);
+}
 
-    tw_welcome welcome = {ui->theme, ui->columns - 1, TWINLINE_VERSION, shown};
-    tw_canvas canvas;
-    if (!tw_welcome_render(&welcome, &canvas))
-        return;
-    tw_strbuf sb;
-    tw_strbuf_init(&sb);
-    for (int y = 0; y < canvas.height; y++) {
-        tw_canvas_render_row(&canvas, y, ui->color, &sb);
-        tw_strbuf_append(&sb, "\n");
-    }
-    print_above(ui, tw_strbuf_str(&sb));
-    tw_strbuf_free(&sb);
-    tw_canvas_free(&canvas);
+/* Shows the welcome banner: animated in the live region at first, then
+ * committed to the scrollback (at once when animations are off). */
+static void start_intro(tw_ui *ui)
+{
+    compute_cwd(ui);
+    ui->intro_active = true;
+    ui->intro_start = now_seconds();
+    if (ui->animate && ui->columns - 1 >= 67)
+        refresh(ui);
+    else
+        print_above(ui, ""); /* commits the banner right away */
 }
 
 /* Runs on the analysis worker thread. */
@@ -399,8 +594,35 @@ static void ui_emit(tw_app *app, const char *text, bool is_error)
     tw_strbuf_append(&sb, RESET "\n");
     if (nl != NULL && nl[1] != '\0')
         format_lines(ui, &sb, nl + 1, false, false);
+    if (strstr(text, "cancelled") != NULL)
+        show_toast(ui, TW_TOAST_WARNING, "Analysis cancelled");
+    else if (is_error)
+        show_toast(ui, TW_TOAST_WARNING, "Analysis failed");
     print_above(ui, tw_strbuf_str(&sb));
     tw_strbuf_free(&sb);
+    pthread_mutex_unlock(&ui->lock);
+}
+
+/* A finished analysis (from the worker, or from analyze-sync on the main
+ * thread while ui->lock is released): shown as a card that counts up. */
+static void ui_on_result(tw_app *app, const tw_analysis_result *result)
+{
+    tw_ui *ui = app->ui;
+    pthread_mutex_lock(&ui->lock);
+    if (ui->card_active)
+        print_above(ui, ""); /* commit the previous card first */
+    ui->card = *result;
+    ui->card_active = true;
+    ui->card_start = now_seconds();
+
+    char message[96];
+    snprintf(message, sizeof message, "Analysis finished in %.2f s", result->seconds);
+    show_toast(ui, TW_TOAST_SUCCESS, message);
+
+    if (ui->animate && !ui->stopping)
+        refresh(ui);
+    else
+        print_above(ui, ""); /* commits the card right away */
     pthread_mutex_unlock(&ui->lock);
 }
 
@@ -672,6 +894,18 @@ static void execute(tw_ui *ui, const char *typed)
         command++;
     if (*command == '/')
         command++;
+
+    /* /threads toggles the per-thread panel of the live region. */
+    if (strcmp(command, "threads") == 0) {
+        ui->show_threads = !ui->show_threads;
+        print_result(ui,
+                     ui->show_threads
+                         ? "Thread panel on: each thread's progress is shown during analysis.\n"
+                         : "Thread panel off.\n",
+                     "");
+        free(text);
+        return;
+    }
 
     char *out_text = NULL;
     char *err_text = NULL;
@@ -978,16 +1212,27 @@ static bool ui_init(tw_ui *ui, tw_app *app, const tw_ui_options *options)
     ui->app = app;
     ui->theme = options->theme ? options->theme : tw_theme_default();
     ui->color = options->color;
+    ui->animate = options->animate;
+    ui->start_time = now_seconds();
     ui->columns = 80;
     int rows = 0;
     tw_term_size(&ui->columns, &rows);
     tw_strbuf_init(&ui->out);
     tw_history_init(&ui->history, 1000);
-    ui->last_percent = -1;
+    if (options->open_file != NULL) {
+        ui->pending_open = strdup(options->open_file);
+        if (ui->pending_open == NULL)
+            return false;
+    }
     if (pthread_mutex_init(&ui->lock, NULL) != 0)
         return false;
+    if (pthread_cond_init(&ui->wake, NULL) != 0) {
+        pthread_mutex_destroy(&ui->lock);
+        return false;
+    }
     if (!tw_line_init(&ui->line) || !tw_line_init(&ui->query)) {
         tw_line_free(&ui->line);
+        pthread_cond_destroy(&ui->wake);
         pthread_mutex_destroy(&ui->lock);
         return false;
     }
@@ -1002,14 +1247,70 @@ static void ui_free(tw_ui *ui)
     tw_completions_free(&ui->files);
     free(ui->draft);
     free(ui->search_saved);
+    free(ui->pending_open);
+    if (ui->prev_valid)
+        tw_canvas_free(&ui->prev);
     tw_strbuf_free(&ui->out);
+    pthread_cond_destroy(&ui->wake);
     pthread_mutex_destroy(&ui->lock);
 }
+
+/* ---------------------------------------------------------- render thread */
+
+static bool wants_frames(tw_ui *ui)
+{
+    return ui->intro_active || ui->card_active || ui->toast_active ||
+           tw_job_is_running(&ui->app->job) || atomic_load(&ui->app->sync_running);
+}
+
+static void sleep_seconds(double seconds)
+{
+    struct timespec ts;
+    ts.tv_sec = (time_t)seconds;
+    ts.tv_nsec = (long)((seconds - (double)ts.tv_sec) * 1e9);
+    while (nanosleep(&ts, &ts) != 0) {
+    }
+}
+
+/*
+ * Draws animation frames while something moves (intro, result card, toast,
+ * running analysis) and sleeps on a condition variable otherwise, so an idle
+ * TwinLine uses no CPU.
+ */
+static void *render_main(void *arg)
+{
+    tw_ui *ui = arg;
+    pthread_mutex_lock(&ui->lock);
+    while (!ui->stopping) {
+        if (!wants_frames(ui)) {
+            pthread_cond_wait(&ui->wake, &ui->lock);
+            continue;
+        }
+        double now = now_seconds();
+        if ((ui->intro_active && now - ui->intro_start >= INTRO_SECONDS) ||
+            (ui->card_active && now - ui->card_start >= CARD_SECONDS))
+            print_above(ui, ""); /* the animation is over: commit it */
+        if (ui->toast_active && now - ui->toast_start >= TW_TOAST_SECONDS)
+            ui->toast_active = false;
+        refresh(ui);
+
+        pthread_mutex_unlock(&ui->lock);
+        sleep_seconds(ui->animate ? FRAME_SECONDS : SLOW_FRAME_SECONDS);
+        pthread_mutex_lock(&ui->lock);
+    }
+    pthread_mutex_unlock(&ui->lock);
+    return NULL;
+}
+
+/* ------------------------------------------------------------- main loop */
 
 /* Handles the keys in `buf`; bytes of an unfinished sequence stay in it.
  * Caller holds ui->lock. */
 static void process_input(tw_ui *ui, unsigned char *buf, size_t *len)
 {
+    if (ui->intro_active)
+        print_above(ui, ""); /* a key press ends the intro at once */
+
     size_t pos = 0;
     while (pos < *len && !ui->quit) {
         tw_key key;
@@ -1042,22 +1343,17 @@ bool tw_ui_run(tw_app *app, const tw_ui_options *options)
 
     app->ui = &ui;
     app->emit = ui_emit;
+    app->on_result = ui_on_result;
 
     pthread_mutex_lock(&ui.lock);
-    print_welcome(&ui);
-    if (options->open_file != NULL) {
-        char command[1100];
-        snprintf(command, sizeof command, "/open %s", options->open_file);
-        execute(&ui, command);
-    }
-    refresh(&ui);
+    start_intro(&ui);
     pthread_mutex_unlock(&ui.lock);
+    ui.render_started = pthread_create(&ui.render_thread, NULL, render_main, &ui) == 0;
 
     unsigned char input[512];
     size_t input_len = 0;
     while (!ui.quit) {
-        bool busy = tw_job_is_running(&app->job);
-        int ready = tw_term_wait_input(busy ? 120 : 1000);
+        int ready = tw_term_wait_input(ui.pending_open != NULL ? 100 : 1000);
 
         /* Read outside the lock, so a background result is never held up. */
         if (ready == 1) {
@@ -1081,25 +1377,36 @@ bool tw_ui_run(tw_app *app, const tw_ui_options *options)
             process_input(&ui, input, &input_len);
             redraw = true;
         }
-        busy = tw_job_is_running(&app->job);
-        int percent = busy ? (int)(100.0 * tw_analysis_progress_fraction(&app->job.progress)) : -1;
-        if (busy != ui.was_busy || percent != ui.last_percent)
-            redraw = true;
-        ui.was_busy = busy;
-        ui.last_percent = percent;
+        if (ui.pending_open != NULL && !ui.intro_active && !ui.quit) {
+            char command[1100];
+            snprintf(command, sizeof command, "/open %s", ui.pending_open);
+            free(ui.pending_open);
+            ui.pending_open = NULL;
+            execute(&ui, command);
+        }
         if (redraw && !ui.quit)
             refresh(&ui);
         flush(&ui);
         pthread_mutex_unlock(&ui.lock);
     }
 
-    /* Leave the live region on screen as it is, below the last output. */
+    /* Stop the animations, then let a running worker finish reporting. */
+    pthread_mutex_lock(&ui.lock);
+    ui.stopping = true;
+    pthread_cond_signal(&ui.wake);
+    pthread_mutex_unlock(&ui.lock);
+    if (ui.render_started)
+        pthread_join(ui.render_thread, NULL);
+
     atomic_store(&app->quitting, true);
     if (tw_job_is_running(&app->job))
         tw_job_cancel(&app->job);
     tw_job_wait(&app->job); /* the worker may still report through ui_emit */
 
     pthread_mutex_lock(&ui.lock);
+    ui.toast_active = false;
+    if (ui.intro_active || ui.card_active)
+        print_above(&ui, "");
     ui.closing = true;
     erase_live(&ui);
     flush(&ui);
@@ -1107,6 +1414,7 @@ bool tw_ui_run(tw_app *app, const tw_ui_options *options)
 
     tw_term_restore();
     app->emit = tw_app_emit_plain;
+    app->on_result = NULL;
     app->ui = NULL;
     ui_free(&ui);
     return true;

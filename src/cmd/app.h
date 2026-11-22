@@ -26,16 +26,26 @@ struct tw_app;
  */
 typedef void (*tw_emit_fn)(struct tw_app *app, const char *text, bool is_error);
 
+/*
+ * Optional: receives finished analysis results as data instead of text, so a
+ * front end can present them its own way. May be called from a worker
+ * thread. When NULL, results are printed as a text report.
+ */
+typedef void (*tw_result_fn)(struct tw_app *app, const tw_analysis_result *result);
+
 typedef struct tw_app {
     FILE *out; /* where commands write results (stdout by default) */
     FILE *err; /* where commands write errors (stderr by default) */
     tw_emit_fn emit;
+    tw_result_fn on_result;
     void *ui; /* owned by the active front end, may be NULL */
     tw_session session;
     tw_analysis_job job;
     tw_analysis_options options;
-    bool quit_armed;      /* "quit" was typed once with unsaved changes */
-    atomic_bool quitting; /* suppresses the prompt redraw from the worker */
+    bool quit_armed;                    /* "quit" was typed once with unsaved changes */
+    atomic_bool quitting;               /* suppresses the prompt redraw from the worker */
+    atomic_bool sync_running;           /* analyze-sync is working */
+    tw_analysis_progress sync_progress; /* its progress, for the UI */
 } tw_app;
 
 tw_status tw_app_init(tw_app *app);

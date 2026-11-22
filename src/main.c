@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cmd/app.h"
@@ -26,6 +27,7 @@ typedef struct cli_options {
     bool exhaustive;
     bool plain;
     bool no_color;
+    bool no_animation;
     const tw_theme *theme;
 } cli_options;
 
@@ -57,6 +59,7 @@ static void print_usage(FILE *out, const char *prog)
             "  --exhaustive     Compare every pair of lines (slower; adds the mean similarity)\n"
             "  --theme=NAME     Colour theme: dark, light, dracula or nord\n"
             "  --no-color       Do not use colours (also honours the NO_COLOR variable)\n"
+            "  --no-animation   Turn off animations (also TWINLINE_REDUCE_MOTION=1)\n"
             "  --plain          Use the plain line interface instead of the terminal UI\n"
             "  -h, --help       Show this help and exit\n"
             "  -V, --version    Show version information and exit\n"
@@ -118,6 +121,8 @@ static int parse_args(int argc, char **argv, const char *prog, cli_options *opts
                 opts->plain = true;
             } else if (strcmp(arg, "--no-color") == 0) {
                 opts->no_color = true;
+            } else if (strcmp(arg, "--no-animation") == 0) {
+                opts->no_animation = true;
             } else if (strncmp(arg, "--theme=", 8) == 0) {
                 opts->theme = tw_theme_find(arg + 8);
                 if (opts->theme == NULL)
@@ -139,7 +144,7 @@ static int parse_args(int argc, char **argv, const char *prog, cli_options *opts
 int main(int argc, char **argv)
 {
     const char *prog = program_name(argc > 0 ? argv[0] : NULL);
-    cli_options opts = {NULL, TW_FOLD_DEFAULT, 0, false, false, false, NULL};
+    cli_options opts = {NULL, TW_FOLD_DEFAULT, 0, false, false, false, false, NULL};
 
     int exit_code = parse_args(argc, argv, prog, &opts);
     if (exit_code >= 0)
@@ -156,8 +161,11 @@ int main(int argc, char **argv)
 
     bool interactive = false;
     if (!opts.plain && tw_ui_available()) {
-        tw_ui_options ui_options = {
-            opts.theme, opts.no_color ? TW_COLOR_NONE : tw_color_mode_detect(), opts.file};
+        const char *reduce = getenv("TWINLINE_REDUCE_MOTION"); // NOLINT(concurrency-mt-unsafe)
+        bool reduce_motion = reduce != NULL && reduce[0] != '\0' && strcmp(reduce, "0") != 0;
+        tw_ui_options ui_options = {opts.theme,
+                                    opts.no_color ? TW_COLOR_NONE : tw_color_mode_detect(),
+                                    opts.file, !opts.no_animation && !reduce_motion};
         interactive = tw_ui_run(&app, &ui_options);
     }
     if (!interactive) {

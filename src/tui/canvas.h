@@ -62,6 +62,12 @@ int tw_canvas_put(tw_canvas *canvas, int x, int y, const char *text, tw_style st
 /* Sets the background colour of `count` cells starting at (x, y). */
 void tw_canvas_paint_bg(tw_canvas *canvas, int x, int y, int count, tw_rgb bg);
 
+/* Copies `src` into `dst` with its top-left corner at (x, y), clipped. */
+void tw_canvas_blit(tw_canvas *dst, const tw_canvas *src, int x, int y);
+
+/* True if row `y` looks the same in both canvases (same width required). */
+bool tw_canvas_row_equal(const tw_canvas *a, const tw_canvas *b, int y);
+
 /* Appends row `y` as plain text, trailing spaces removed. */
 void tw_canvas_row_text(const tw_canvas *canvas, int y, tw_strbuf *out);
 

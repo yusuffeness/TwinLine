@@ -8,6 +8,7 @@ tw_status tw_app_init(tw_app *app)
     app->out = stdout;
     app->err = stderr;
     app->emit = tw_app_emit_plain;
+    app->on_result = NULL;
     app->ui = NULL;
     tw_status status = tw_session_init(&app->session);
     if (status != TW_OK)
@@ -15,6 +16,8 @@ tw_status tw_app_init(tw_app *app)
     tw_job_init(&app->job);
     tw_analysis_options_default(&app->options);
     app->quit_armed = false;
+    atomic_init(&app->sync_running, false);
+    tw_analysis_progress_init(&app->sync_progress);
     atomic_init(&app->quitting, false);
     return TW_OK;
 }

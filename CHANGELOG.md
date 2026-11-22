@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-22
+
+### Added
+
+- Render thread that draws at 30 frames per second while something moves and
+  sleeps on a condition variable otherwise (no CPU use when idle). Only the
+  rows of the live region that changed are redrawn.
+- Live analysis view: spinner, shimmering "Analyzing…" label, elapsed time,
+  percentage, pairs done / total, thread count and "esc to cancel".
+- Gradient progress bar drawn to an eighth of a cell.
+- `threads` command (`/threads` in the UI) that toggles a per-thread progress
+  panel; the plain interface prints each thread's progress.
+- Animated welcome banner with a light sweeping over the logo; a key press
+  skips it.
+- Result card whose numbers count up, with a `J 0.86` similarity badge and a
+  word diff of the most similar pair (removed words in red, added in green).
+- Toasts for finished, cancelled and failed analyses.
+- Input box border that breathes while an analysis runs.
+- `--no-animation` option and `TWINLINE_REDUCE_MOTION` environment variable
+  for still frames.
+- Unit tests for the progress bar, spinner, number formatting, word diff,
+  canvas blitting and row comparison, the progress view, toasts and the
+  result card.
+
+### Changed
+
+- The snippets of the most similar pair start just before the first word
+  where the two lines differ, so the difference is visible in reports.
+- Analysis progress tracks elapsed time and each worker thread.
+- "Analysing" is now spelled "Analyzing" everywhere.
+
+### Fixed
+
+- A finished result card keeps no spinner glyph in the scrollback.
+
 ## [0.5.0] - 2026-11-22
 
 ### Added
@@ -163,7 +198,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.clang-format` and `.clang-tidy`.
 - MIT license, README and roadmap.
 
-[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/yusuffeness/TwinLine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/yusuffeness/TwinLine/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/yusuffeness/TwinLine/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/yusuffeness/TwinLine/compare/v0.2.0...v0.3.0

@@ -70,13 +70,13 @@ and leaves the repository in a working, presentable state.
 
 ## Milestone 5 - Animations and live views (v0.6.0)
 
-- [ ] Render thread at 30 FPS with damage tracking
-- [ ] Spinner and shimmer
-- [ ] Live analysis line with cancel on Esc
-- [ ] Gradient progress bar and per-thread panel
-- [ ] Breathing border, logo shine, counting results, toasts
-- [ ] Coloured diff view
-- [ ] `--no-animation` and reduced motion
+- [x] Render thread at 30 FPS with damage tracking
+- [x] Spinner and shimmer
+- [x] Live analysis line with cancel on Esc
+- [x] Gradient progress bar and per-thread panel
+- [x] Breathing border, logo shine, counting results, toasts
+- [x] Coloured diff view
+- [x] `--no-animation` and reduced motion
 
 ## Milestone 6 - Editing features (v0.7.0)
 

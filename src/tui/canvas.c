@@ -136,6 +136,36 @@ void tw_canvas_row_text(const tw_canvas *canvas, int y, tw_strbuf *out)
     }
 }
 
+static bool same_style(tw_style a, tw_style b);
+
+void tw_canvas_blit(tw_canvas *dst, const tw_canvas *src, int x, int y)
+{
+    for (int row = 0; row < src->height; row++) {
+        int ty = y + row;
+        if (ty < 0 || ty >= dst->height)
+            continue;
+        for (int col = 0; col < src->width; col++) {
+            int tx = x + col;
+            if (tx >= 0 && tx < dst->width)
+                *cell_at(dst, tx, ty) = *cell_at(src, col, row);
+        }
+    }
+}
+
+bool tw_canvas_row_equal(const tw_canvas *a, const tw_canvas *b, int y)
+{
+    if (a->width != b->width || y < 0 || y >= a->height || y >= b->height)
+        return false;
+    for (int x = 0; x < a->width; x++) {
+        const tw_cell *ca = cell_at(a, x, y);
+        const tw_cell *cb = cell_at(b, x, y);
+        if (ca->width != cb->width || strcmp(ca->glyph, cb->glyph) != 0 ||
+            !same_style(ca->style, cb->style))
+            return false;
+    }
+    return true;
+}
+
 static bool same_style(tw_style a, tw_style b)
 {
     if (a.flags != b.flags)

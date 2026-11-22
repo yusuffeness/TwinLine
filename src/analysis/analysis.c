@@ -46,10 +46,57 @@ size_t tw_analysis_thread_count(const tw_analysis_options *options)
     return threads > TW_MAX_THREADS ? TW_MAX_THREADS : threads;
 }
 
+void tw_analysis_progress_init(tw_analysis_progress *progress)
+{
+    atomic_init(&progress->pairs_done, 0);
+    atomic_init(&progress->pairs_total, 0);
+    atomic_init(&progress->start_ns, 0);
+    atomic_init(&progress->threads, 0);
+    for (size_t i = 0; i < TW_PROGRESS_SLOTS; i++)
+        atomic_init(&progress->thread_done[i], 0);
+}
+
 void tw_analysis_progress_reset(tw_analysis_progress *progress)
 {
     atomic_store(&progress->pairs_done, 0);
     atomic_store(&progress->pairs_total, 0);
+    atomic_store(&progress->start_ns, 0);
+    atomic_store(&progress->threads, 0);
+    for (size_t i = 0; i < TW_PROGRESS_SLOTS; i++)
+        atomic_store(&progress->thread_done[i], 0);
+}
+
+static unsigned long long now_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (unsigned long long)ts.tv_sec * 1000000000ULL + (unsigned long long)ts.tv_nsec;
+}
+
+double tw_analysis_progress_elapsed(tw_analysis_progress *progress)
+{
+    unsigned long long start = atomic_load_explicit(&progress->start_ns, memory_order_relaxed);
+    if (start == 0)
+        return 0.0;
+    unsigned long long now = now_ns();
+    return now > start ? (double)(now - start) / 1e9 : 0.0;
+}
+
+size_t tw_analysis_progress_threads(tw_analysis_progress *progress, double *fractions, size_t max)
+{
+    size_t threads = atomic_load_explicit(&progress->threads, memory_order_relaxed);
+    unsigned long long total = atomic_load_explicit(&progress->pairs_total, memory_order_relaxed);
+    if (threads > TW_PROGRESS_SLOTS)
+        threads = TW_PROGRESS_SLOTS;
+    if (threads > max)
+        threads = max;
+    double share = threads > 0 ? (double)total / (double)threads : 0.0;
+    for (size_t t = 0; t < threads; t++) {
+        double done = (double)atomic_load_explicit(&progress->thread_done[t], memory_order_relaxed);
+        double f = share > 0.0 ? done / share : 0.0;
+        fractions[t] = f > 1.0 ? 1.0 : f;
+    }
+    return threads;
 }
 
 double tw_analysis_progress_fraction(tw_analysis_progress *progress)
@@ -77,14 +124,44 @@ static bool is_cancelled(atomic_bool *cancel)
     return cancel != NULL && atomic_load_explicit(cancel, memory_order_relaxed);
 }
 
-static void copy_snippet(char *dst, const char *src)
+/* Copies up to TW_SNIPPET_BYTES of `src + offset`, marking cut ends with "...". */
+static void copy_snippet(char *dst, const char *src, size_t offset)
 {
+    if (offset > 0) {
+        memcpy(dst, "...", 3);
+        dst += 3;
+        src += offset;
+    }
     size_t len = tw_utf8_prefix_len(src, TW_SNIPPET_BYTES);
     memcpy(dst, src, len);
     if (src[len] != '\0')
         memcpy(dst + len, "...", 4);
     else
         dst[len] = '\0';
+}
+
+/*
+ * Where the snippets of two similar lines should start: when their first
+ * difference would be cut off, start two words before it so the reader
+ * sees what changed. Both lines share the bytes before the difference, so
+ * the offset is a word boundary in both.
+ */
+static size_t snippet_offset(const char *a, const char *b)
+{
+    size_t diverge = 0;
+    while (a[diverge] != '\0' && a[diverge] == b[diverge])
+        diverge++;
+    if (diverge <= TW_SNIPPET_BYTES / 2)
+        return 0;
+    size_t start = diverge;
+    for (int words = 0; words < 3 && start > 0; words++) {
+        while (start > 0 && a[start - 1] != ' ')
+            start--; /* to the start of this word */
+        if (words < 2)
+            while (start > 0 && a[start - 1] == ' ')
+                start--; /* over the gap before it */
+    }
+    return start;
 }
 
 #define TW_NO_MATCH SIZE_MAX
@@ -267,6 +344,7 @@ typedef struct worker_result {
 
 typedef struct worker {
     pthread_t thread;
+    size_t index;
     bool started;
     shared_work *work;
     worker_result result;
@@ -359,8 +437,11 @@ static void *worker_main(void *arg)
             compare_row(work, i, &self->result);
             done += (unsigned long long)(rows - i - 1);
         }
-        if (work->progress != NULL)
+        if (work->progress != NULL) {
             atomic_fetch_add_explicit(&work->progress->pairs_done, done, memory_order_relaxed);
+            atomic_fetch_add_explicit(&work->progress->thread_done[self->index % TW_PROGRESS_SLOTS],
+                                      done, memory_order_relaxed);
+        }
     }
     return NULL;
 }
@@ -432,6 +513,8 @@ tw_status tw_analysis_run(const tw_document *doc, const tw_analysis_options *opt
         return TW_ERR_INVALID;
 
     const double start = now_seconds();
+    if (progress != NULL)
+        atomic_store(&progress->start_ns, now_ns());
     out->threshold = options->threshold;
     out->exhaustive = options->exhaustive;
     out->lines_total = doc->count;
@@ -453,6 +536,8 @@ tw_status tw_analysis_run(const tw_document *doc, const tw_analysis_options *opt
     if (threads == 0)
         threads = 1;
     out->threads = threads;
+    if (progress != NULL)
+        atomic_store(&progress->threads, threads);
 
     worker *workers = calloc(threads, sizeof *workers);
     if (workers == NULL) {
@@ -470,8 +555,10 @@ tw_status tw_analysis_run(const tw_document *doc, const tw_analysis_options *opt
     work.chunk = rows / (threads * CHUNKS_PER_THREAD);
     if (work.chunk == 0)
         work.chunk = 1;
-    for (size_t t = 0; t < threads; t++)
+    for (size_t t = 0; t < threads; t++) {
         workers[t].work = &work;
+        workers[t].index = t;
+    }
 
     run_workers(workers, threads);
 
@@ -487,8 +574,9 @@ tw_status tw_analysis_run(const tw_document *doc, const tw_analysis_options *opt
     if (out->best_similarity > 0.0) {
         out->best_a = best_a + 1;
         out->best_b = best_b + 1;
-        copy_snippet(out->best_a_text, doc->lines[best_a]);
-        copy_snippet(out->best_b_text, doc->lines[best_b]);
+        size_t offset = snippet_offset(doc->lines[best_a], doc->lines[best_b]);
+        copy_snippet(out->best_a_text, doc->lines[best_a], offset);
+        copy_snippet(out->best_b_text, doc->lines[best_b], offset);
     }
 
     out->seconds = now_seconds() - start;

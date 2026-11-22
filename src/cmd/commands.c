@@ -191,20 +191,31 @@ static void cmd_analyze_sync(tw_app *app, const char *arg, bool force)
         return;
 
     tw_analysis_result result;
-    tw_status status = tw_analysis_run(&snapshot, &app->options, NULL, NULL, &result);
+    tw_analysis_progress_reset(&app->sync_progress);
+    atomic_store(&app->sync_running, true);
+    tw_status status =
+        tw_analysis_run(&snapshot, &app->options, NULL, &app->sync_progress, &result);
+    atomic_store(&app->sync_running, false);
     tw_document_free(&snapshot);
 
     if (status != TW_OK) {
         print_error(app, "analysis failed: %s", tw_status_str(status));
         return;
     }
-    tw_report_print(app->out, "Analysis finished:", &result);
+    if (app->on_result != NULL)
+        app->on_result(app, &result);
+    else
+        tw_report_print(app->out, "Analysis finished:", &result);
 }
 
 /* Runs on the worker thread: formats the outcome and hands it to the front end. */
 static void on_background_done(tw_status status, const tw_analysis_result *result, void *user)
 {
     tw_app *app = user;
+    if (status == TW_OK && app->on_result != NULL) {
+        app->on_result(app, result);
+        return;
+    }
     char *text = NULL;
     size_t len = 0;
     FILE *buf = open_memstream(&text, &len);
@@ -248,7 +259,7 @@ static void cmd_analyze(tw_app *app, const char *arg, bool force)
         print_error(app, "cannot start the analysis: %s", tw_status_str(status));
         return;
     }
-    fprintf(app->out, "Analysing %zu line%s in the background. Use 'status' or 'cancel'.\n", lines,
+    fprintf(app->out, "Analyzing %zu line%s in the background. Use 'status' or 'cancel'.\n", lines,
             plural(lines));
 }
 
@@ -286,6 +297,20 @@ static void cmd_status(tw_app *app, const char *arg, bool force)
                 100.0 * tw_analysis_progress_fraction(&app->job.progress));
     else
         fprintf(app->out, "%s\n", "Analysis : idle");
+}
+
+static void cmd_threads(tw_app *app, const char *arg, bool force)
+{
+    (void)arg;
+    (void)force;
+    if (!tw_job_is_running(&app->job)) {
+        fprintf(app->out, "No analysis is running.\n");
+        return;
+    }
+    double fractions[TW_PROGRESS_SLOTS];
+    size_t count = tw_analysis_progress_threads(&app->job.progress, fractions, TW_PROGRESS_SLOTS);
+    for (size_t t = 0; t < count; t++)
+        fprintf(app->out, "Thread %2zu : %3.0f%%\n", t + 1, 100.0 * fractions[t]);
 }
 
 static void cmd_help(tw_app *app, const char *arg, bool force)
@@ -342,6 +367,10 @@ static const command_spec COMMANDS[] = {
      ARGS_NONE,
      false,
      cmd_status},
+    {{"threads", "threads", "Show the progress of each analysis thread", false},
+     ARGS_NONE,
+     false,
+     cmd_threads},
     {{"help", "help", "Show this list", false}, ARGS_NONE, false, cmd_help},
     {{"quit", "quit[!]", "Exit (quit! discards unsaved changes)", false}, ARGS_NONE, true, NULL},
     {{"exit", "exit[!]", "Same as quit", false}, ARGS_NONE, true, NULL},
