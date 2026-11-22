@@ -1,84 +1,110 @@
 <div align="center">
 
-# TwinLine
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-light.svg">
+  <img src="docs/assets/logo.svg" alt="TwinLine" width="420">
+</picture>
 
 **A concurrent terminal editor that finds the lines that look alike.**
 
 [![CI](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml/badge.svg)](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/yusuffeness/TwinLine?color=blueviolet)](https://github.com/yusuffeness/TwinLine/releases/latest)
 [![codecov](https://codecov.io/gh/yusuffeness/TwinLine/graph/badge.svg)](https://codecov.io/gh/yusuffeness/TwinLine)
-![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Version](https://img.shields.io/badge/version-0.9.0-blueviolet)
-![Language](https://img.shields.io/badge/language-C17-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![C17](https://img.shields.io/badge/language-C17-blue)
+![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS-lightgrey)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+<img src="docs/assets/demo.gif" alt="TwinLine finding near-duplicate lines: live progress per thread, a result card with a word diff, clusters and one-step de-duplication" width="860">
 
 </div>
-
----
-
-> [!NOTE]
-> TwinLine is under active development. v0.9.0 makes it a tool for scripts
-> and a safe place to work: `twinline analyze | clusters | dedupe | export`
-> with JSON output and meaningful exit codes, a `config.toml`, autosave with
-> crash recovery, and notices when another program changes an open file.
-> Packaging and the 1.0 launch come next. Follow the
-> [roadmap](docs/ROADMAP.md) to see what is next.
 
 ## What is TwinLine?
 
 TwinLine is a line-based text editor for the terminal with a built-in
-**near-duplicate detector**. It scans a document for lines that are identical
-or almost identical, groups them and helps you clean them up, all while you
-keep typing.
+**near-duplicate detector**. It finds lines that are identical or almost
+identical, groups them into clusters and helps you clean them up, in an
+animated terminal interface or from a script.
 
-It started as a university assignment on POSIX threads and is being rebuilt
-from the ground up as a polished, open-source tool.
+- **Exact and fast.** The default search compares every pair of lines with
+  the Jaccard similarity, on every core, and skips only pairs that provably
+  cannot match: 56 times faster than the naive algorithm, same answer.
+- **Large files.** MinHash and LSH find near duplicates in a 100 MiB file in
+  seconds; every pair they report is real.
+- **Clusters and clean-up.** See which lines belong together, keep one of
+  each and undo it all in one step.
+- **A terminal UI with care.** Live progress per thread, result cards with a
+  word diff, fuzzy command menu, history, completion, four themes.
+- **Made for scripts.** `twinline analyze | clusters | dedupe | export`, JSON
+  output, meaningful exit codes, standard input.
+- **Safe with your work.** Atomic saves, autosave with crash recovery,
+  notices when another program changes an open file.
+
+It started as a university assignment on POSIX threads and was rebuilt as a
+complete open-source tool: about 10,000 lines of C17 with no dependencies,
+tested under sanitizers, fuzzing and static analysis on every change.
+
+## Install
+
+**Homebrew** (macOS and Linux):
+
+```sh
+brew install yusuffeness/twinline/twinline
+```
+
+**Debian and Ubuntu**: download the `.deb` for your machine from the
+[latest release](https://github.com/yusuffeness/TwinLine/releases/latest), then
+
+```sh
+sudo apt install ./twinline_*.deb
+```
+
+**Docker**:
+
+```sh
+docker run --rm -it -v "$PWD":/work ghcr.io/yusuffeness/twinline notes.txt
+docker run --rm -v "$PWD":/work ghcr.io/yusuffeness/twinline analyze notes.txt
+```
+
+**Release archives** for Linux (x86_64, arm64) and macOS (arm64, x86_64), with
+`SHA256SUMS`, are on the [releases page](https://github.com/yusuffeness/TwinLine/releases).
+[Building from source](#building-from-source) takes a C compiler and CMake.
 
 ## Quick start
 
 ```sh
-make                       # build
-make corpus                # generate a 1 MiB test corpus in corpus/
-./build/twinline corpus/corpus-1MiB.txt
+twinline notes.txt                       # edit, then type /analyze or /clusters
+twinline analyze notes.txt               # a report; exit code 1 if anything is similar
+twinline dedupe notes.txt -o clean.txt   # keep one line per cluster
+man twinline                             # everything else
 ```
 
-In a terminal, TwinLine opens its interactive UI:
+In the editor, type `/` for the command menu and `?` for the keyboard
+shortcuts. Results scroll like in any terminal program; a live region at the
+bottom shows the input box, the progress of a running analysis and the
+status bar:
 
 ```text
-╭─────────────────────────────────────────────────────────────────╮
-│  ████████╗██╗    ██╗██╗███╗   ██╗██╗     ██╗███╗   ██╗███████╗  │
-│  ╚══██╔══╝██║    ██║██║████╗  ██║██║     ██║████╗  ██║██╔════╝  │
-│     ██║   ██║ █╗ ██║██║██╔██╗ ██║██║     ██║██╔██╗ ██║█████╗    │
-│     ██║   ██║███╗██║██║██║╚██╗██║██║     ██║██║╚██╗██║██╔══╝    │
-│     ██║   ╚███╔███╔╝██║██║ ╚████║███████╗██║██║ ╚████║███████╗  │
-│     ╚═╝    ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝  │
-│ ✻ Welcome to TwinLine v0.6.0                                    │
-│   /help for commands · ? for shortcuts · Tab to complete        │
-╰─────────────────────────────────────────────────────────────────╯
-
-> /threads
-  ⎿ ✔ Thread panel on: each thread's progress is shown during analysis.
 > /analyze
-  ⎿ ✔ Analyzing 4662 lines in the background. Use 'status' or 'cancel'.
- ✺ Analyzing… 0.4 s · 44% · 4.8M / 11M pairs · 2 threads · esc to cancel
-   █████████████████████▍░░░░░░░░░░░░░░░░░░░░░░░░░░  44%
-     T1  █████████████████▍░░░░░░░░░░░░░░░░░░░░  46%
-     T2  ████████████████▍░░░░░░░░░░░░░░░░░░░░░  43%
-╭────────────────────────────────────────────────────────────────────╮
-│ > Type a command, or / for the menu                                │
-╰────────────────────────────────────────────────────────────────────╯
- ▸ med.txt · 4,662 lines · 2 threads · exhaustive
+  ⎿ ✔ Analyzing 4652 lines in the background. Use 'status' or 'cancel'.
+ ✺ Analyzing… 0.8 s · 30% · 3.2M / 11M pairs · 2 threads · esc to cancel
+   ███████████████▎░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  30%
+     T1  ████████████▍░░░░░░░░░░░░░░░░░░░░░░░░  34%
+     T2  █████████▊░░░░░░░░░░░░░░░░░░░░░░░░░░░  26%
+╭──────────────────────────────────────────────────────────────────╮
+│ > Type a command, or / for the menu                              │
+╰──────────────────────────────────────────────────────────────────╯
+ ▸ corpus.txt · 4,652 lines · 2 threads · exhaustive
 ```
 
-When the analysis is done, its result card counts up into place and a toast
-confirms it:
+When the analysis is done, its result card counts up into place:
 
 ```text
-✔ Analysis finished in 1.04 s with 2 threads
-  ⎿ 4,662 lines · 10,864,791 line pairs · mean J 0.0242
-    ● 36 identical pairs    ● 40 near duplicates (J ≥ 0.70)
-    Most similar pair  J 0.86
-      917  ...disk started carefully!
-     1327  ...disk started task
+✔ Analysis finished in 3.23 s with 2 threads
+  ⎿ 4,652 lines · 10,818,226 line pairs · mean J 0.0243
+    ● 28 identical pairs    ● 63 near duplicates (J ≥ 0.60)
+    Most similar pair  J 0.85
+      1504  ...kitchen features changed.
+      4330  ...kitchen features projects
 ```
 
 Output scrolls like any terminal program; only the input box, the command
@@ -330,8 +356,11 @@ of 0.105 s (1.7x); `bench_load FILE` measures it on your machine.
 
 ## Planned features
 
-- **Side-by-side view** of all near-duplicate pairs.
-- Packages for Homebrew and Debian, a container image, a man page and a demo.
+- A side-by-side view of all near-duplicate pairs, with keys to keep, merge
+  or skip each one.
+- Similarity of whole paragraphs and of code (token-aware features).
+- A native Windows build (today: WSL or Docker).
+- Shell completions for bash, zsh and fish.
 
 ## Building from source
 
@@ -357,6 +386,8 @@ Useful targets:
 | `make coverage`| Coverage report with gcovr                        |
 | `make bench`   | Benchmark and redraw `docs/assets/benchmark.png`  |
 | `make corpus`  | Generate a test corpus (`CORPUS_SIZE=10MiB`)      |
+| `make package` | Build the `.deb` and `.tar.gz` packages            |
+| `make install` | Install the binary and the man page (`/usr/local`) |
 | `make format`  | Format the sources with clang-format              |
 | `make help`    | List every target                                 |
 
@@ -370,18 +401,38 @@ clang-tidy and coverage reporting. See [docs/TESTING.md](docs/TESTING.md).
 ## Project layout
 
 ```
-include/twinline/   Public headers
-src/                Sources: core, analysis, cmd (commands), tui (terminal UI)
-tests/              Unit, integration and fuzz tests
-bench/              Benchmarks
-scripts/            Helper scripts (test corpus generator, demo recording)
-docs/               Roadmap, architecture notes and design decisions
+include/twinline/   Public headers of the core and analysis layers
+src/                core, analysis, cmd (commands, scripting, services), tui
+tests/              Unit, golden-file integration, terminal UI and fuzz tests
+bench/              Speed, load and MinHash accuracy benchmarks
+man/                The man page, twinline(1)
+packaging/          The Homebrew formula template
+scripts/            Corpus generator, demo recorder, release helpers
+docs/               Architecture, algorithms, configuration, testing, ADRs
+.github/            CI, release, CodeQL, issue and pull request templates
 ```
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): layers, threads and locks
+- [docs/ALGORITHMS.md](docs/ALGORITHMS.md): Jaccard, the exact pruning, MinHash and LSH, clusters
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md): every setting of `config.toml`
+- [docs/TESTING.md](docs/TESTING.md): how TwinLine is tested
+- [docs/adr/](docs/adr/): the reasons behind the larger decisions
+- `man twinline`: the command reference
 
 ## Roadmap
 
-TwinLine is built in ten milestones, from the project skeleton (v0.1.0) to a
-packaged v1.0.0 release. See [docs/ROADMAP.md](docs/ROADMAP.md).
+TwinLine reached v1.0.0 in ten milestones, from the project skeleton to a
+packaged release; [docs/ROADMAP.md](docs/ROADMAP.md) records them.
+Ideas for what comes next are under [Planned features](#planned-features).
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome; see
+[CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md).
+Please report security problems privately, as described in
+[SECURITY.md](SECURITY.md).
 
 ## License
 

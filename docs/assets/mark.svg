@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">TwinLine</title>
+  <defs>
+    <linearGradient id="twin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7aa2f7"/>
+      <stop offset="1" stop-color="#bb9af7"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#1a1b26"/>
+  <rect x="18" y="38" width="80" height="16" rx="8" fill="url(#twin)"/>
+  <rect x="30" y="74" width="80" height="16" rx="8" fill="url(#twin)" opacity="0.85"/>
+</svg>

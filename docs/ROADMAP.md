@@ -1,7 +1,7 @@
 # Roadmap
 
-TwinLine is developed in ten milestones. Each one ends with a tagged release
-and leaves the repository in a working, presentable state.
+TwinLine was developed in ten milestones, all complete. Each one ended with a
+tagged release and left the repository in a working, presentable state.
 
 | Milestone | Version | Theme |
 | --------- | ------- | ----- |
@@ -106,10 +106,10 @@ and leaves the repository in a working, presentable state.
 
 ## Milestone 9 - Launch (v1.0.0)
 
-- [ ] Release binaries for Linux and macOS
-- [ ] Homebrew tap, Debian package and Docker image
-- [ ] Man page
-- [ ] Architecture, algorithm and configuration docs
-- [ ] Logo and demo GIF
-- [ ] Contributing guide, code of conduct, security policy and templates
-- [ ] v1.0.0 release
+- [x] Release binaries for Linux and macOS
+- [x] Homebrew tap, Debian package and Docker image
+- [x] Man page
+- [x] Architecture, algorithm and configuration docs
+- [x] Logo and demo GIF
+- [x] Contributing guide, code of conduct, security policy and templates
+- [x] v1.0.0 release

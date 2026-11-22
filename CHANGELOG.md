@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-22
+
+The first stable release: everything from the 0.x series, packaged.
+
+### Added
+
+- Release workflow: pushing a `vX.Y.Z` tag builds and tests TwinLine on
+  Linux (x86_64, arm64) and macOS (arm64, x86_64) and publishes a GitHub
+  release with `.tar.gz` archives, Debian packages, `SHA256SUMS` and the
+  CHANGELOG section as notes. It refuses a tag that does not match the
+  project version.
+- A container image on GitHub Container Registry for linux/amd64 and
+  linux/arm64 (`ghcr.io/yusuffeness/twinline`).
+- A Homebrew formula, attached to every release and committed to the tap
+  `yusuffeness/homebrew-twinline` when a token is configured.
+- `make install` also installs the man page and documentation, and
+  `make package` builds the `.deb` and `.tar.gz` packages (CPack).
+- The man page `twinline(1)`.
+- `docs/ARCHITECTURE.md` (layers, threads, locks) and five architecture
+  decision records in `docs/adr/`.
+- `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue forms and a
+  pull request template.
+- A logo for light and dark backgrounds, a social preview image and a demo
+  GIF, recorded from the real program by `scripts/record_demo.py`.
+
+### Security
+
+- The terminal interface no longer passes control characters from a
+  document to the terminal: a line containing escape sequences could move
+  the cursor, change colours or set the window title. They are now shown in
+  caret notation (`^[`), as `cat -v` does. The plain interface and the
+  subcommands still print text unchanged.
+
+### Removed
+
+- Empty placeholder directories from the first milestone.
+
 ## [0.9.0] - 2026-11-22
 
 ### Added
@@ -306,7 +343,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.clang-format` and `.clang-tidy`.
 - MIT license, README and roadmap.
 
-[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/yusuffeness/TwinLine/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/yusuffeness/TwinLine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/yusuffeness/TwinLine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/yusuffeness/TwinLine/compare/v0.6.0...v0.7.0
