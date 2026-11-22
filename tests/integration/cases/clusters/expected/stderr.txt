@@ -1,0 +1,7 @@
+error: no clusters yet. Type 'clusters' first to review what will be removed.
+error: there is no cluster 4; 3 were found.
+error: the file name must end in .json, .csv or .html.
+error: the document or the settings changed since 'clusters'. Type 'clusters' first to review what will be removed.
+error: there is no cluster 9; 3 were found.
+error: cluster 1 has 3 lines; choose one of them to keep.
+error: usage: dedupe [N [K]]

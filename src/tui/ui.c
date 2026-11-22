@@ -256,6 +256,9 @@ static void build_view(tw_ui *ui, double now, tw_view *view, tw_activity *activi
 
     view->threads = tw_analysis_thread_count(&app->options);
     view->exhaustive = app->options.exhaustive;
+    view->mode = app->options.strategy != TW_STRATEGY_JACCARD
+                     ? tw_strategy_name(app->options.strategy)
+                     : NULL;
     view->turkish = app->options.fold == TW_FOLD_TURKISH;
 }
 

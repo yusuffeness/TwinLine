@@ -13,6 +13,7 @@
 #include "twinline/analysis.h"
 #include "twinline/job.h"
 #include "twinline/session.h"
+#include "twinline/similarity.h"
 #include "twinline/status.h"
 
 #define TW_PROMPT "twinline> "
@@ -63,6 +64,13 @@ typedef struct tw_app {
 
     tw_analysis_job job;
     tw_analysis_options options;
+    /* The last "clusters" result, for "dedupe" and "export". It belongs to
+     * the document state and settings it was computed with. Main thread only. */
+    tw_similarity clusters;
+    bool has_clusters;
+    unsigned long long clusters_state; /* undo state of the buffer */
+    tw_analysis_options clusters_options;
+
     bool quit_armed;                    /* "quit" was typed once with unsaved changes */
     atomic_bool quitting;               /* suppresses the prompt redraw from the worker */
     atomic_bool sync_running;           /* analyze-sync is working */

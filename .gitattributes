@@ -7,3 +7,6 @@
 
 # Fuzz seeds contain deliberately malformed bytes: never touch them.
 tests/fuzz/corpus/** binary
+
+# CSV exports end their lines with CRLF (RFC 4180): keep the golden files as they are.
+tests/integration/cases/*/expected/files/*.csv -text

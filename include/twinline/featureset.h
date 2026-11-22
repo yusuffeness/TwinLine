@@ -34,6 +34,18 @@ typedef struct tw_featureset_builder {
 void tw_featureset_builder_init(tw_featureset_builder *builder);
 void tw_featureset_builder_free(tw_featureset_builder *builder);
 
+#define TW_NGRAM_DEFAULT 2 /* words and word pairs */
+#define TW_NGRAM_MAX     4
+
+/*
+ * Same as tw_featureset_builder_build(), with the longest word n-gram given:
+ * 1 uses single words only, 2 adds adjacent word pairs (the default), 3 also
+ * word triples, up to TW_NGRAM_MAX. Values out of range are clamped.
+ */
+tw_status tw_featureset_builder_build_ngram(tw_featureset_builder *builder, const char *line,
+                                            tw_fold_mode fold, int ngram, tw_featureset *view,
+                                            size_t *word_count);
+
 /*
  * Builds the feature set of `line` into the builder's scratch space. `view`
  * points into that space and stays valid until the next call on the same

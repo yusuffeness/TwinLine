@@ -441,9 +441,12 @@ static void draw_status(tw_canvas *canvas, const tw_view *view, int y)
     char count[32];
     char info[160];
     tw_format_count(view->lines, count, sizeof count);
+    const char *mode = view->mode;
+    if (mode == NULL)
+        mode = view->exhaustive ? "exhaustive" : "pruned";
     snprintf(info, sizeof info, " · %s line%s · %zu thread%s · %s%s", count,
-             view->lines == 1 ? "" : "s", view->threads, view->threads == 1 ? "" : "s",
-             view->exhaustive ? "exhaustive" : "pruned", view->turkish ? " · turkish" : "");
+             view->lines == 1 ? "" : "s", view->threads, view->threads == 1 ? "" : "s", mode,
+             view->turkish ? " · turkish" : "");
     tw_draw_text(canvas, x, y, canvas->width - x - 1, info, muted);
 }
 
@@ -734,7 +737,13 @@ bool tw_card_render(const tw_result_card *card, tw_canvas *out)
     tw_format_count((size_t)counted(r->lines_total, p), a, sizeof a);
     tw_format_count((size_t)counted(r->pairs, p), b, sizeof b);
     tw_format_count((size_t)counted(r->compared, p), c, sizeof c);
-    if (r->exhaustive)
+    char d[32];
+    tw_format_count((size_t)counted(r->unique_lines, p), d, sizeof d);
+    if (r->strategy == TW_STRATEGY_EXACT)
+        snprintf(line, sizeof line, "%s lines · %s distinct · exact strategy", a, d);
+    else if (r->strategy == TW_STRATEGY_MINHASH)
+        snprintf(line, sizeof line, "%s lines · %s distinct · %s candidates (minhash)", a, d, c);
+    else if (r->exhaustive)
         snprintf(line, sizeof line, "%s lines · %s line pairs · mean J %.4f", a, b,
                  r->mean_similarity * tw_ease_out(p));
     else
@@ -747,6 +756,10 @@ bool tw_card_render(const tw_result_card *card, tw_canvas *out)
     tw_format_count((size_t)counted(r->identical, p), a, sizeof a);
     x = tw_canvas_put(out, x, y, a, tw_style_fg(theme->success, TW_STYLE_BOLD));
     x = tw_canvas_put(out, x, y, " identical pairs    ", tw_style_plain());
+    if (r->strategy == TW_STRATEGY_EXACT) {
+        tw_draw_text(out, x, y, width - x - 1, "near duplicates not searched", muted);
+        return true;
+    }
     x = tw_canvas_put(out, x, y, "● ", tw_style_fg(theme->accent, TW_STYLE_BOLD));
     tw_format_count((size_t)counted(r->near, p), b, sizeof b);
     x = tw_canvas_put(out, x, y, b, tw_style_fg(theme->accent, TW_STYLE_BOLD));

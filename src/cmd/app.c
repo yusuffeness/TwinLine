@@ -4,6 +4,7 @@
 #include "cmd/app.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 tw_status tw_app_init(tw_app *app)
 {
@@ -28,6 +29,9 @@ tw_status tw_app_init(tw_app *app)
     tw_job_init(&app->job);
     tw_analysis_options_default(&app->options);
     app->quit_armed = false;
+    memset(&app->clusters, 0, sizeof app->clusters);
+    app->has_clusters = false;
+    app->clusters_state = 0;
     atomic_init(&app->sync_running, false);
     tw_analysis_progress_init(&app->sync_progress);
     atomic_init(&app->quitting, false);
@@ -39,6 +43,9 @@ void tw_app_destroy(tw_app *app)
     atomic_store(&app->quitting, true);
     tw_job_destroy(&app->job);
     tw_session_destroy(&app->session);
+    if (app->has_clusters)
+        tw_similarity_free(&app->clusters);
+    app->has_clusters = false;
     for (size_t i = 0; i < app->buffer_count; i++)
         tw_buffer_free(&app->buffers[i]);
     free(app->buffers);

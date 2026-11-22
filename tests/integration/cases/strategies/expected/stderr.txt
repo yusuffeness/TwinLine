@@ -1,0 +1,8 @@
+error: unknown setting 'bogus'. Settings: threshold, threads, strategy, exhaustive, fold, ngram.
+error: threshold must be a number above 0 and at most 1, got '2'.
+error: usage: set [NAME VALUE]. Type 'set' to see the settings.
+error: threads must be 'auto' or 1 to 256, got '0'.
+error: ngram must be 1 to 4, got '9'.
+error: strategy must be jaccard, exact or minhash, got 'fast'.
+error: exhaustive must be on or off, got 'maybe'.
+error: fold must be default or turkish, got 'greek'.

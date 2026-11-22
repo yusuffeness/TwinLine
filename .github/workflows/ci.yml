@@ -213,6 +213,15 @@ jobs:
             --json=benchmark.json corpus/corpus-1MiB.txt | tee benchmark.txt
           { echo '```'; cat benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
+      # Fails if MinHash reports a pair that is not similar or the strategies
+      # disagree on identical lines; the recall is shown in the summary.
+      - name: Check the MinHash accuracy
+        run: |
+          for t in 0.5 0.7 0.9; do
+            ./build/bench/bench_accuracy --threshold=$t corpus/corpus-1MiB.txt
+          done | tee accuracy.txt
+          { echo '```'; cat accuracy.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
       # Results of the last run on main are kept in the Actions cache and
       # compared with this run; a slowdown beyond the threshold is reported.
       - name: Restore previous results

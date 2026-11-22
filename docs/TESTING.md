@@ -92,7 +92,8 @@ rendered and checked in a test.
 `tests/integration/tui_smoke.py` starts the real binary in a pseudo-terminal,
 types keys (menus, Tab completion, history search, paste, Ctrl+C) and waits
 for the expected text on the screen. It also edits a line through `/edit`,
-undoes the change, searches and opens a second buffer. The first session runs with animations
+undoes the change, searches, switches to the minhash strategy, lists the
+clusters and opens a second buffer. The first session runs with animations
 and the second with `--no-animation`, so both drawing paths are covered. It needs a POSIX system and runs in CI
 on Linux and macOS, also under the sanitizers and Valgrind
 (`TWINLINE_TUI_TIMEOUT` raises its time limit for slow runs).
@@ -141,6 +142,7 @@ Run it with address-space randomisation disabled:
 | Format and static analysis | clang-format and clang-tidy, pinned versions |
 | Coverage | gcovr report, fails below 80 % line coverage, uploaded to Codecov |
 | Fuzz | Each target fuzzed for 60 seconds with ASan and UBSan |
+| Benchmark | Analysis timings compared with the last run on `main`, and the MinHash accuracy check: fails if MinHash reports a pair that is not similar or the strategies disagree on identical lines |
 
 `.github/workflows/codeql.yml` runs GitHub CodeQL weekly and on every change
 to `main` once the repository is public.

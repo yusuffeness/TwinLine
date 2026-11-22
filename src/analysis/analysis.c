@@ -22,11 +22,12 @@
 #include <string.h>
 #include <time.h>
 
+#include "analysis/index.h"
 #include "twinline/featureset.h"
+#include "twinline/similarity.h"
 #include "twinline/sysinfo.h"
 
-#define CANCEL_CHECK_LINES 1024
-#define CHUNKS_PER_THREAD  64
+#define CHUNKS_PER_THREAD 64
 
 /* ------------------------------------------------------------------------ */
 /* Options and progress                                                      */
@@ -38,6 +39,33 @@ void tw_analysis_options_default(tw_analysis_options *options)
     options->fold = TW_FOLD_DEFAULT;
     options->threads = 0;
     options->exhaustive = false;
+    options->strategy = TW_STRATEGY_JACCARD;
+    options->ngram = TW_NGRAM_DEFAULT;
+}
+
+const char *tw_strategy_name(tw_strategy strategy)
+{
+    switch (strategy) {
+    case TW_STRATEGY_EXACT:
+        return "exact";
+    case TW_STRATEGY_MINHASH:
+        return "minhash";
+    case TW_STRATEGY_JACCARD:
+        break;
+    }
+    return "jaccard";
+}
+
+bool tw_strategy_parse(const char *name, tw_strategy *out)
+{
+    static const tw_strategy ALL[] = {TW_STRATEGY_JACCARD, TW_STRATEGY_EXACT, TW_STRATEGY_MINHASH};
+    for (size_t i = 0; i < sizeof ALL / sizeof ALL[0]; i++) {
+        if (strcmp(name, tw_strategy_name(ALL[i])) == 0) {
+            *out = ALL[i];
+            return true;
+        }
+    }
+    return false;
 }
 
 size_t tw_analysis_thread_count(const tw_analysis_options *options)
@@ -124,205 +152,12 @@ static bool is_cancelled(atomic_bool *cancel)
     return cancel != NULL && atomic_load_explicit(cancel, memory_order_relaxed);
 }
 
-/* Copies up to TW_SNIPPET_BYTES of `src + offset`, marking cut ends with "...". */
-static void copy_snippet(char *dst, const char *src, size_t offset)
-{
-    if (offset > 0) {
-        memcpy(dst, "...", 3);
-        dst += 3;
-        src += offset;
-    }
-    size_t len = tw_utf8_prefix_len(src, TW_SNIPPET_BYTES);
-    memcpy(dst, src, len);
-    if (src[len] != '\0')
-        memcpy(dst + len, "...", 4);
-    else
-        dst[len] = '\0';
-}
-
-/*
- * Where the snippets of two similar lines should start: when their first
- * difference would be cut off, start two words before it so the reader
- * sees what changed. Both lines share the bytes before the difference, so
- * the offset is a word boundary in both.
- */
-static size_t snippet_offset(const char *a, const char *b)
-{
-    size_t diverge = 0;
-    while (a[diverge] != '\0' && a[diverge] == b[diverge])
-        diverge++;
-    if (diverge <= TW_SNIPPET_BYTES / 2)
-        return 0;
-    size_t start = diverge;
-    for (int words = 0; words < 3 && start > 0; words++) {
-        while (start > 0 && a[start - 1] != ' ')
-            start--; /* to the start of this word */
-        if (words < 2)
-            while (start > 0 && a[start - 1] == ' ')
-                start--; /* over the gap before it */
-    }
-    return start;
-}
-
-#define TW_NO_MATCH SIZE_MAX
-
-static double jaccard_of(size_t common, size_t na, size_t nb)
-{
-    return (double)common / (double)(na + nb - common);
-}
-
-/*
- * Smallest intersection size c for which jaccard_of(c, na, nb) >= target,
- * computed with the same floating-point expression used for scoring so the
- * filter can never disagree with the score. Returns 0 when target <= 0.
- */
-static size_t min_common_for(double target, size_t na, size_t nb)
-{
-    if (target <= 0.0)
-        return 0;
-    size_t c = (size_t)(target * (double)(na + nb) / (1.0 + target));
-    if (c > na)
-        c = na;
-    while (c > 0 && jaccard_of(c - 1, na, nb) >= target)
-        c--;
-    while (c <= na && jaccard_of(c, na, nb) < target)
-        c++;
-    return c;
-}
-
-/*
- * Size of the intersection of two sorted, unique hash arrays. Stops early
- * and returns TW_NO_MATCH as soon as the remaining elements cannot lift the
- * intersection to `needed`; pass 0 to always get the exact size.
- */
-static size_t intersect(const uint64_t *a, size_t na, const uint64_t *b, size_t nb, size_t needed)
-{
-    size_t i = 0;
-    size_t j = 0;
-    size_t common = 0;
-    while (i < na && j < nb) {
-        if (a[i] == b[j]) {
-            common++;
-            i++;
-            j++;
-            continue;
-        }
-        if (a[i] < b[j])
-            i++;
-        else
-            j++;
-        size_t left = (na - i < nb - j) ? na - i : nb - j;
-        if (common + left < needed)
-            return TW_NO_MATCH;
-    }
-    return common;
-}
-
-/* ------------------------------------------------------------------------ */
-/* Step 1: feature index                                                     */
-/* ------------------------------------------------------------------------ */
-
-typedef struct line_entry {
-    size_t offset;     /* first hash in the arena */
-    size_t count;      /* number of hashes */
-    size_t line_index; /* 0-based line in the document */
-} line_entry;
-
-typedef struct feature_index {
-    uint64_t *arena;
-    size_t arena_len;
-    size_t arena_cap;
-    line_entry *entries;
-    size_t count;
-} feature_index;
-
-static void index_free(feature_index *index)
-{
-    free(index->arena);
-    free(index->entries);
-    memset(index, 0, sizeof *index);
-}
-
-static tw_status arena_append(feature_index *index, const uint64_t *hashes, size_t count)
-{
-    if (index->arena_len + count > index->arena_cap) {
-        size_t new_cap = index->arena_cap ? index->arena_cap : 4096;
-        while (new_cap < index->arena_len + count) {
-            if (new_cap > SIZE_MAX / 2 / sizeof *index->arena)
-                return TW_ERR_NOMEM;
-            new_cap *= 2;
-        }
-        uint64_t *arena = realloc(index->arena, new_cap * sizeof *arena);
-        if (arena == NULL)
-            return TW_ERR_NOMEM;
-        index->arena = arena;
-        index->arena_cap = new_cap;
-    }
-    memcpy(index->arena + index->arena_len, hashes, count * sizeof *hashes);
-    index->arena_len += count;
-    return TW_OK;
-}
-
-static int compare_entries(const void *lhs, const void *rhs)
-{
-    const line_entry *a = lhs;
-    const line_entry *b = rhs;
-    if (a->count != b->count)
-        return a->count < b->count ? -1 : 1;
-    return (a->line_index > b->line_index) - (a->line_index < b->line_index);
-}
-
-static tw_status build_index(const tw_document *doc, tw_fold_mode fold, atomic_bool *cancel,
-                             feature_index *index, size_t *word_count)
-{
-    memset(index, 0, sizeof *index);
-    index->entries = calloc(doc->count ? doc->count : 1, sizeof *index->entries);
-    if (index->entries == NULL)
-        return TW_ERR_NOMEM;
-
-    tw_featureset_builder builder;
-    tw_featureset_builder_init(&builder);
-    tw_status status = TW_OK;
-
-    for (size_t i = 0; i < doc->count; i++) {
-        if (i % CANCEL_CHECK_LINES == 0 && is_cancelled(cancel)) {
-            status = TW_ERR_CANCELLED;
-            break;
-        }
-
-        tw_featureset view;
-        status = tw_featureset_builder_build(&builder, doc->lines[i], fold, &view, word_count);
-        if (status != TW_OK)
-            break;
-        if (view.count == 0)
-            continue;
-
-        size_t offset = index->arena_len;
-        status = arena_append(index, view.hashes, view.count);
-        if (status != TW_OK)
-            break;
-        index->entries[index->count].offset = offset;
-        index->entries[index->count].count = view.count;
-        index->entries[index->count].line_index = i;
-        index->count++;
-    }
-
-    tw_featureset_builder_free(&builder);
-    if (status != TW_OK) {
-        index_free(index);
-        return status;
-    }
-
-    qsort(index->entries, index->count, sizeof *index->entries, compare_entries);
-    return TW_OK;
-}
-
 /* ------------------------------------------------------------------------ */
 /* Step 2: parallel comparison                                               */
 /* ------------------------------------------------------------------------ */
 
 typedef struct shared_work {
-    const feature_index *index;
+    const tw_feature_index *index;
     double threshold;
     bool exhaustive;
     atomic_bool *cancel;
@@ -373,8 +208,8 @@ static void consider_best(worker_result *r, double similarity, size_t line_i, si
 
 static void compare_row(const shared_work *work, size_t i, worker_result *r)
 {
-    const feature_index *index = work->index;
-    const line_entry *entries = index->entries;
+    const tw_feature_index *index = work->index;
+    const tw_line_entry *entries = index->entries;
     const uint64_t *a = index->arena + entries[i].offset;
     size_t na = entries[i].count;
 
@@ -393,10 +228,10 @@ static void compare_row(const shared_work *work, size_t i, worker_result *r)
         size_t needed = 0;
         if (!work->exhaustive) {
             double target = r->best < work->threshold ? r->best : work->threshold;
-            needed = min_common_for(target, na, nb);
+            needed = tw_min_common_for(target, na, nb);
         }
 
-        size_t common = intersect(a, na, index->arena + entries[j].offset, nb, needed);
+        size_t common = tw_intersect(a, na, index->arena + entries[j].offset, nb, needed);
         r->compared++;
         if (common == TW_NO_MATCH)
             continue;
@@ -406,7 +241,7 @@ static void compare_row(const shared_work *work, size_t i, worker_result *r)
             continue;
         }
 
-        double similarity = jaccard_of(common, na, nb);
+        double similarity = tw_jaccard_of(common, na, nb);
         r->sum += similarity;
         if (similarity >= work->threshold)
             r->near++;
@@ -515,12 +350,25 @@ tw_status tw_analysis_run(const tw_document *doc, const tw_analysis_options *opt
     const double start = now_seconds();
     if (progress != NULL)
         atomic_store(&progress->start_ns, now_ns());
+
+    if (options->strategy != TW_STRATEGY_JACCARD) {
+        tw_similarity similarity;
+        tw_status status = tw_similarity_run(doc, options, cancel, progress, &similarity);
+        if (status != TW_OK)
+            return status;
+        tw_similarity_to_result(&similarity, doc, out);
+        tw_similarity_free(&similarity);
+        out->seconds = now_seconds() - start;
+        return TW_OK;
+    }
     out->threshold = options->threshold;
     out->exhaustive = options->exhaustive;
     out->lines_total = doc->count;
 
-    feature_index index;
-    tw_status status = build_index(doc, options->fold, cancel, &index, &out->words_total);
+    tw_feature_index index;
+    tw_status status =
+        tw_index_build(doc, options->fold, options->ngram, tw_analysis_thread_count(options),
+                       cancel, &index, &out->words_total);
     if (status != TW_OK)
         return status;
 
@@ -541,7 +389,7 @@ tw_status tw_analysis_run(const tw_document *doc, const tw_analysis_options *opt
 
     worker *workers = calloc(threads, sizeof *workers);
     if (workers == NULL) {
-        index_free(&index);
+        tw_index_free(&index);
         return TW_ERR_NOMEM;
     }
 
@@ -566,7 +414,7 @@ tw_status tw_analysis_run(const tw_document *doc, const tw_analysis_options *opt
     size_t best_b = 0;
     bool complete = merge_results(workers, threads, out, &best_a, &best_b);
     free(workers);
-    index_free(&index);
+    tw_index_free(&index);
 
     if (!complete || is_cancelled(cancel))
         return TW_ERR_CANCELLED;
@@ -574,9 +422,7 @@ tw_status tw_analysis_run(const tw_document *doc, const tw_analysis_options *opt
     if (out->best_similarity > 0.0) {
         out->best_a = best_a + 1;
         out->best_b = best_b + 1;
-        size_t offset = snippet_offset(doc->lines[best_a], doc->lines[best_b]);
-        copy_snippet(out->best_a_text, doc->lines[best_a], offset);
-        copy_snippet(out->best_b_text, doc->lines[best_b], offset);
+        tw_snippets(doc->lines[best_a], doc->lines[best_b], out->best_a_text, out->best_b_text);
     }
 
     out->seconds = now_seconds() - start;

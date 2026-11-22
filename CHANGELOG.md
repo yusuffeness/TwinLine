@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-22
+
+### Added
+
+- Analysis strategies, chosen with `--strategy=NAME` (`--exact`,
+  `--minhash`) or `set strategy`:
+  - `jaccard`, the exact search of earlier versions (still the default);
+  - `exact`, identical lines only, through a hash table in linear time;
+  - `minhash`, MinHash signatures (128 hash functions) and 32 LSH bands of
+    4 rows. Every candidate is scored exactly, so no pair is reported that
+    is not similar. On the 1 MiB corpus it gives the same result as
+    `jaccard` 39 times faster; a 100 MiB file takes about 7 s on 2 cores.
+- `clusters [N]`: lines that are similar directly or through other lines,
+  joined with union-find, largest first; `clusters N` lists one with each
+  line's similarity to the first.
+- `dedupe [N [K]]`: keeps the first line of every cluster, or of cluster N
+  (or its K-th line). It is one change, so one `undo` restores everything.
+- `export FILE`: the clusters and pairs as JSON, CSV (RFC 4180) or a
+  self-contained, colourful HTML report with word-level highlights.
+- `set [NAME VALUE]` for `threshold`, `threads`, `strategy`, `exhaustive`,
+  `fold` and `ngram`, and the options `--threshold=X`, `--strategy=NAME` and
+  `--ngram=N`.
+- Word n-grams up to 4 (`ngram`): 1 compares single words, 2 adds word
+  pairs (the default, unchanged), 3 and 4 make word order count more.
+- `bench_accuracy` and `make bench-accuracy`: MinHash recall and precision
+  against the exact search. CI runs it and fails if MinHash ever reports a
+  false pair or the strategies disagree on identical lines.
+- The status bar, `status` and the result card show the strategy.
+- Unit tests for the strategies, clusters, the export formats, the settings
+  and n-grams; integration tests for clusters, de-duplication and settings.
+
+### Changed
+
+- The feature index is shared by all strategies and built by several
+  threads for large documents.
+- Undo state ids are unique across buffers.
+
 ## [0.7.0] - 2026-11-22
 
 ### Added
@@ -231,7 +268,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.clang-format` and `.clang-tidy`.
 - MIT license, README and roadmap.
 
-[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/yusuffeness/TwinLine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/yusuffeness/TwinLine/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/yusuffeness/TwinLine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/yusuffeness/TwinLine/compare/v0.4.0...v0.5.0

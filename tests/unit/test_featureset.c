@@ -3,6 +3,8 @@
  *
  * SPDX-License-Identifier: MIT
  */
+#include <string.h>
+
 #include "../tw_test.h"
 #include "twinline/featureset.h"
 
@@ -126,6 +128,60 @@ TW_TEST(word_count_accumulates)
     TW_CHECK_EQ_SIZE(words, 12);
 }
 
+static size_t ngram_count(const char *line, int ngram)
+{
+    tw_featureset_builder builder;
+    tw_featureset_builder_init(&builder);
+    tw_featureset view;
+    size_t count = 0;
+    if (tw_featureset_builder_build_ngram(&builder, line, TW_FOLD_DEFAULT, ngram, &view, NULL) ==
+        TW_OK)
+        count = view.count;
+    tw_featureset_builder_free(&builder);
+    return count;
+}
+
+TW_TEST(ngram_sizes)
+{
+    /* 4 words: 4 singles, 3 pairs, 2 triples, 1 quadruple. */
+    TW_CHECK_EQ_SIZE(ngram_count("one two three four", 1), 4);
+    TW_CHECK_EQ_SIZE(ngram_count("one two three four", 2), 7);
+    TW_CHECK_EQ_SIZE(ngram_count("one two three four", 3), 9);
+    TW_CHECK_EQ_SIZE(ngram_count("one two three four", 4), 10);
+    TW_CHECK_EQ_SIZE(ngram_count("one two three four", 9), 10); /* clamped */
+    TW_CHECK_EQ_SIZE(ngram_count("one two three four", 0), 4);  /* clamped */
+    TW_CHECK_EQ_SIZE(ngram_count("solo", 3), 1);
+
+    /* n = 2 is the default feature set. */
+    tw_featureset a;
+    TW_CHECK_EQ_INT(tw_featureset_build("one two three four", TW_FOLD_DEFAULT, &a, NULL), TW_OK);
+    tw_featureset_builder builder;
+    tw_featureset_builder_init(&builder);
+    tw_featureset b;
+    TW_CHECK_EQ_INT(tw_featureset_builder_build_ngram(&builder, "one two three four",
+                                                      TW_FOLD_DEFAULT, 2, &b, NULL),
+                    TW_OK);
+    TW_CHECK_EQ_SIZE(a.count, b.count);
+    TW_CHECK(memcmp(a.hashes, b.hashes, a.count * sizeof *a.hashes) == 0);
+    tw_featureset_builder_free(&builder);
+    tw_featureset_free(&a);
+
+    /* Triples tell "a b c d" from "b c d a" better than pairs do. */
+    tw_featureset_builder_init(&builder);
+    tw_featureset_builder bb;
+    tw_featureset_builder_init(&bb);
+    tw_featureset x;
+    tw_featureset y;
+    TW_CHECK_EQ_INT(
+        tw_featureset_builder_build_ngram(&builder, "a b c d e", TW_FOLD_DEFAULT, 3, &x, NULL),
+        TW_OK);
+    TW_CHECK_EQ_INT(
+        tw_featureset_builder_build_ngram(&bb, "a b c d f", TW_FOLD_DEFAULT, 3, &y, NULL), TW_OK);
+    TW_CHECK_EQ_SIZE(tw_featureset_intersection(&x, &y), 4 + 3 + 2);
+    tw_featureset_builder_free(&builder);
+    tw_featureset_builder_free(&bb);
+}
+
 int main(void)
 {
     puts("featureset");
@@ -138,5 +194,6 @@ int main(void)
     TW_RUN(jaccard_of_disjoint_and_empty_sets);
     TW_RUN(intersection_is_symmetric);
     TW_RUN(word_count_accumulates);
+    TW_RUN(ngram_sizes);
     return tw_test_summary();
 }

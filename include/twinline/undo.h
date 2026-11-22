@@ -5,7 +5,7 @@
  * put in their place. tw_undo records each splice with copies of both sides,
  * so it can be reversed and replayed. Each recorded state has a unique id,
  * which lets a session tell whether the document is back at the state it
- * was saved in.
+ * was saved in. Ids are unique across all histories of the process.
  *
  * Like tw_document, a tw_undo is not thread-safe on its own.
  *
@@ -38,7 +38,6 @@ typedef struct tw_undo {
     size_t cap;
     size_t limit;
     unsigned long long base_id; /* state id before edits[0] */
-    unsigned long long next_id;
 } tw_undo;
 
 void tw_undo_init(tw_undo *undo, size_t limit);
@@ -66,7 +65,7 @@ tw_status tw_undo_undo(tw_undo *undo, tw_document *doc, const tw_edit **edit);
  * nothing to redo. */
 tw_status tw_undo_redo(tw_undo *undo, tw_document *doc, const tw_edit **edit);
 
-/* Id of the current state; equal ids mean equal documents. */
+/* Id of the current state; equal ids mean the same document in the same state. */
 unsigned long long tw_undo_state(const tw_undo *undo);
 
 /* "insert of 2 lines at line 4", "delete of line 7", "replace of lines 3-5" */

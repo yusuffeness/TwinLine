@@ -10,6 +10,7 @@
 #include "cmd/app.h"
 #include "cmd/commands.h"
 #include "cmd/repl.h"
+#include "cmd/settings.h"
 #include "tui/ui.h"
 #include "twinline/version.h"
 
@@ -22,9 +23,7 @@ enum {
 
 typedef struct cli_options {
     const char *file;
-    tw_fold_mode fold;
-    size_t threads;
-    bool exhaustive;
+    tw_analysis_options analysis;
     bool plain;
     bool no_color;
     bool no_animation;
@@ -57,6 +56,11 @@ static void print_usage(FILE *out, const char *prog)
             "  --fold=MODE      Case folding for analysis: 'default' or 'turkish'\n"
             "  --threads=N      Worker threads for analysis (default: one per processor)\n"
             "  --exhaustive     Compare every pair of lines (slower; adds the mean similarity)\n"
+            "  --threshold=X    Near-duplicate threshold, above 0 and at most 1 (default 0.70)\n"
+            "  --strategy=NAME  jaccard (exact, default), exact (identical lines only) or\n"
+            "                   minhash (fast for large files; may miss a few pairs)\n"
+            "  --exact, --minhash  Short for --strategy=exact and --strategy=minhash\n"
+            "  --ngram=N        Longest word n-gram compared, 1 to 4 (default 2)\n"
             "  --theme=NAME     Colour theme: dark, light, dracula or nord\n"
             "  --no-color       Do not use colours (also honours the NO_COLOR variable)\n"
             "  --no-animation   Turn off animations (also TWINLINE_REDUCE_MOTION=1)\n"
@@ -108,15 +112,30 @@ static int parse_args(int argc, char **argv, const char *prog, cli_options *opts
                 print_version(stdout);
                 return TW_EXIT_OK;
             } else if (strcmp(arg, "--fold=default") == 0) {
-                opts->fold = TW_FOLD_DEFAULT;
+                opts->analysis.fold = TW_FOLD_DEFAULT;
             } else if (strcmp(arg, "--fold=turkish") == 0) {
-                opts->fold = TW_FOLD_TURKISH;
+                opts->analysis.fold = TW_FOLD_TURKISH;
             } else if (strncmp(arg, "--threads=", 10) == 0) {
-                opts->threads = parse_threads(arg + 10);
-                if (opts->threads == 0)
+                opts->analysis.threads = parse_threads(arg + 10);
+                if (opts->analysis.threads == 0)
                     return usage_error(prog, "thread count must be between 1 and 256, got", arg);
             } else if (strcmp(arg, "--exhaustive") == 0) {
-                opts->exhaustive = true;
+                opts->analysis.exhaustive = true;
+            } else if (strcmp(arg, "--exact") == 0) {
+                opts->analysis.strategy = TW_STRATEGY_EXACT;
+            } else if (strcmp(arg, "--minhash") == 0) {
+                opts->analysis.strategy = TW_STRATEGY_MINHASH;
+            } else if (strncmp(arg, "--threshold=", 12) == 0 ||
+                       strncmp(arg, "--strategy=", 11) == 0 || strncmp(arg, "--ngram=", 8) == 0) {
+                char name[16];
+                const char *eq = strchr(arg, '=');
+                snprintf(name, sizeof name, "%.*s", (int)(eq - arg - 2), arg + 2);
+                char message[160];
+                if (!tw_setting_set(&opts->analysis, name, eq + 1, message, sizeof message)) {
+                    fprintf(stderr, "%s: %s\n", prog, message);
+                    fprintf(stderr, "Try '%s --help' for more information.\n", prog);
+                    return TW_EXIT_USAGE;
+                }
             } else if (strcmp(arg, "--plain") == 0) {
                 opts->plain = true;
             } else if (strcmp(arg, "--no-color") == 0) {
@@ -144,7 +163,9 @@ static int parse_args(int argc, char **argv, const char *prog, cli_options *opts
 int main(int argc, char **argv)
 {
     const char *prog = program_name(argc > 0 ? argv[0] : NULL);
-    cli_options opts = {NULL, TW_FOLD_DEFAULT, 0, false, false, false, false, NULL};
+    cli_options opts;
+    memset(&opts, 0, sizeof opts);
+    tw_analysis_options_default(&opts.analysis);
 
     int exit_code = parse_args(argc, argv, prog, &opts);
     if (exit_code >= 0)
@@ -155,9 +176,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "%s: cannot initialise\n", prog);
         return TW_EXIT_FAILURE;
     }
-    app.options.fold = opts.fold;
-    app.options.threads = opts.threads;
-    app.options.exhaustive = opts.exhaustive;
+    app.options = opts.analysis;
 
     bool interactive = false;
     if (!opts.plain && tw_ui_available()) {

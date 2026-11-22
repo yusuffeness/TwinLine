@@ -21,6 +21,10 @@ twinline> Commands:
   cancel           Stop the running background analysis
   status           Show the file, unsaved changes and analysis progress
   threads          Show the progress of each analysis thread
+  clusters [N]     Group similar lines, or show cluster N
+  dedupe [N [K]]   Keep one line per cluster (or line K of cluster N)
+  export FILE      Save the clusters as .json, .csv or .html
+  set [NAME VALUE] Show or change the analysis settings
   help             Show this list
   quit[!]          Exit (quit! discards unsaved changes)
   exit[!]          Same as quit

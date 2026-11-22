@@ -88,13 +88,13 @@ and leaves the repository in a working, presentable state.
 
 ## Milestone 7 - Advanced analysis (v0.8.0)
 
-- [ ] Exact strategy
-- [ ] MinHash + LSH
-- [ ] Union-find clustering
-- [ ] Interactive de-duplication
-- [ ] Runtime settings (`/set`)
-- [ ] JSON, CSV and HTML export
-- [ ] Accuracy benchmark
+- [x] Exact strategy
+- [x] MinHash + LSH
+- [x] Union-find clustering
+- [x] Interactive de-duplication
+- [x] Runtime settings (`/set`)
+- [x] JSON, CSV and HTML export
+- [x] Accuracy benchmark
 
 ## Milestone 8 - Services and scripting (v0.9.0)
 

@@ -9,6 +9,7 @@ set(TWINLINE_UNIT_TESTS
     undo
     fileio
     analysis
+    similarity
     parallel
     job
     tui_keys

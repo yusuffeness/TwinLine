@@ -132,6 +132,7 @@ typedef struct tw_view {
     size_t lines;
     size_t threads;
     bool exhaustive;
+    const char *mode; /* replaces "pruned" / "exhaustive" when not NULL */
     bool turkish;
 } tw_view;
 

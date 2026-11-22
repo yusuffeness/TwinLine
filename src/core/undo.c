@@ -3,15 +3,25 @@
  */
 #include "twinline/undo.h"
 
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* State ids are unique across every history in the process, so a state id
+ * also tells which document it belongs to. */
+static atomic_ullong next_state_id = 1;
+
+static unsigned long long new_id(void)
+{
+    return atomic_fetch_add_explicit(&next_state_id, 1, memory_order_relaxed);
+}
 
 void tw_undo_init(tw_undo *undo, size_t limit)
 {
     memset(undo, 0, sizeof *undo);
     undo->limit = limit > 0 ? limit : 1;
-    undo->next_id = 1;
+    undo->base_id = new_id();
 }
 
 static void free_lines(char **lines, size_t count)
@@ -48,7 +58,7 @@ void tw_undo_clear(tw_undo *undo)
 {
     drop_from(undo, 0);
     undo->applied = 0;
-    undo->base_id = undo->next_id++;
+    undo->base_id = new_id();
 }
 
 static char **copy_lines(const char *const *texts, size_t count, bool *ok)
@@ -127,7 +137,7 @@ tw_status tw_undo_apply(tw_undo *undo, tw_document *doc, size_t at, size_t remov
         tw_undo_clear(undo);
         return TW_OK;
     }
-    edit.id = undo->next_id++;
+    edit.id = new_id();
     undo->edits[undo->count++] = edit;
     undo->applied = undo->count;
     return TW_OK;

@@ -3,13 +3,16 @@
  */
 #include "cmd/commands.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "cmd/export.h"
 #include "cmd/report.h"
+#include "cmd/settings.h"
 #include "twinline/fileio.h"
 #include "twinline/utf8.h"
 
@@ -64,6 +67,8 @@ static bool session_is_dirty(tw_app *app)
 /* ------------------------------------------------------------------------ */
 /* Argument helpers                                                          */
 /* ------------------------------------------------------------------------ */
+
+static void trim_trailing_space(char *s);
 
 /* Parses a positive decimal number at `*p` and advances past it. */
 static bool parse_number(const char **p, size_t *out)
@@ -844,7 +849,10 @@ static void cmd_status(tw_app *app, const char *arg, bool force)
     size_t threads = tw_analysis_thread_count(&app->options);
     fprintf(app->out, "Threads  : %zu%s\n", threads,
             app->options.threads == 0 ? " (one per processor)" : "");
-    fprintf(app->out, "Mode     : %s\n", app->options.exhaustive ? "exhaustive" : "pruned");
+    if (app->options.strategy == TW_STRATEGY_JACCARD)
+        fprintf(app->out, "Mode     : %s\n", app->options.exhaustive ? "exhaustive" : "pruned");
+    else
+        fprintf(app->out, "Mode     : %s\n", tw_strategy_name(app->options.strategy));
     if (tw_job_is_running(&app->job))
         fprintf(app->out, "Analysis : running, %.0f%% done\n",
                 100.0 * tw_analysis_progress_fraction(&app->job.progress));
@@ -871,6 +879,309 @@ static void cmd_help(tw_app *app, const char *arg, bool force)
     (void)arg;
     (void)force;
     tw_command_print_help(app->out);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Settings, clusters, de-duplication and export                             */
+/* ------------------------------------------------------------------------ */
+
+static void cmd_set(tw_app *app, const char *arg, bool force)
+{
+    (void)force;
+    if (*arg == '\0') {
+        tw_settings_print(app->out, &app->options);
+        return;
+    }
+    char name[32];
+    const char *space = strchr(arg, ' ');
+    if (space == NULL || (size_t)(space - arg) >= sizeof name) {
+        print_error(app, "usage: set [NAME VALUE]. Type 'set' to see the settings.");
+        return;
+    }
+    snprintf(name, sizeof name, "%.*s", (int)(space - arg), arg);
+    const char *value = space + 1;
+    while (*value == ' ')
+        value++;
+    char trimmed[64];
+    snprintf(trimmed, sizeof trimmed, "%s", value);
+    trim_trailing_space(trimmed);
+
+    if (tw_job_is_running(&app->job)) {
+        print_error(app, "an analysis is running; change the settings when it is done.");
+        return;
+    }
+    char message[200];
+    if (!tw_setting_set(&app->options, name, trimmed, message, sizeof message)) {
+        print_error(app, "%s", message);
+        return;
+    }
+    fprintf(app->out, "%s set to %s.\n", name, trimmed);
+}
+
+/* True if the stored clusters still describe the active buffer. */
+static bool clusters_current(tw_app *app)
+{
+    if (!app->has_clusters)
+        return false;
+    const tw_analysis_options *a = &app->clusters_options;
+    const tw_analysis_options *b = &app->options;
+    if (a->threshold != b->threshold || a->strategy != b->strategy || a->fold != b->fold ||
+        a->ngram != b->ngram)
+        return false;
+    pthread_mutex_lock(&app->session.lock);
+    bool same = tw_undo_state(&app->session.undo) == app->clusters_state;
+    pthread_mutex_unlock(&app->session.lock);
+    return same;
+}
+
+/* Computes fresh clusters for the active buffer (on this thread). */
+static bool compute_clusters(tw_app *app)
+{
+    tw_document snapshot;
+    if (!take_snapshot(app, &snapshot))
+        return false;
+    pthread_mutex_lock(&app->session.lock);
+    unsigned long long state = tw_undo_state(&app->session.undo);
+    pthread_mutex_unlock(&app->session.lock);
+
+    tw_similarity result;
+    tw_analysis_progress_reset(&app->sync_progress);
+    atomic_store(&app->sync_running, true);
+    tw_status status =
+        tw_similarity_run(&snapshot, &app->options, NULL, &app->sync_progress, &result);
+    atomic_store(&app->sync_running, false);
+    tw_document_free(&snapshot);
+    if (status != TW_OK) {
+        print_error(app, "cannot find the clusters: %s", tw_status_str(status));
+        return false;
+    }
+    if (app->has_clusters)
+        tw_similarity_free(&app->clusters);
+    app->clusters = result;
+    app->has_clusters = true;
+    app->clusters_state = state;
+    app->clusters_options = app->options;
+    return true;
+}
+
+static bool ensure_clusters(tw_app *app)
+{
+    return clusters_current(app) || compute_clusters(app);
+}
+
+#define TW_CLUSTERS_LISTED 10 /* clusters in the summary */
+
+/* "12, 40, 77 and 3 more" */
+static void print_cluster_lines(tw_app *app, size_t k, size_t max)
+{
+    const tw_similarity *s = &app->clusters;
+    size_t begin = s->cluster_start[k];
+    size_t size = s->cluster_start[k + 1] - begin;
+    size_t shown = size < max ? size : max;
+    for (size_t i = 0; i < shown; i++)
+        fprintf(app->out, "%s%zu", i ? ", " : "", s->cluster_lines[begin + i] + 1);
+    if (shown < size)
+        fprintf(app->out, " and %zu more", size - shown);
+}
+
+static void print_cluster(tw_app *app, size_t k)
+{
+    const tw_similarity *s = &app->clusters;
+    size_t begin = s->cluster_start[k];
+    size_t end = s->cluster_start[k + 1];
+    pthread_mutex_lock(&app->session.lock);
+    const tw_document *doc = &app->session.doc;
+    size_t first = s->cluster_lines[begin];
+    fprintf(app->out, "Cluster %zu of %zu (%zu lines):\n", k + 1, s->cluster_count, end - begin);
+    for (size_t i = begin; i < end; i++) {
+        size_t line = s->cluster_lines[i];
+        double j = i == begin ? 1.0
+                              : tw_line_similarity(doc->lines[first], doc->lines[line],
+                                                   app->options.fold, app->options.ngram);
+        char tag[16];
+        if (i == begin)
+            snprintf(tag, sizeof tag, "first ");
+        else if (j >= 1.0)
+            snprintf(tag, sizeof tag, "same  ");
+        else
+            snprintf(tag, sizeof tag, "J %.2f", j);
+        fprintf(app->out, "  %3zu. %6zu  %s  %s\n", i - begin + 1, line + 1, tag, doc->lines[line]);
+    }
+    pthread_mutex_unlock(&app->session.lock);
+    fprintf(app->out,
+            "  Type 'dedupe %zu' to keep the first line, 'dedupe %zu K' to keep line K "
+            "of this list.\n",
+            k + 1, k + 1);
+}
+
+static void cmd_clusters(tw_app *app, const char *arg, bool force)
+{
+    (void)force;
+    size_t number = 0;
+    if (*arg != '\0') {
+        const char *p = arg;
+        if (!parse_number(&p, &number) || *p != '\0' || number == 0) {
+            print_error(app, "usage: clusters [N]");
+            return;
+        }
+        if (!ensure_clusters(app))
+            return;
+        if (number > app->clusters.cluster_count) {
+            print_error(app, "there is no cluster %zu; %zu were found.", number,
+                        app->clusters.cluster_count);
+            return;
+        }
+        print_cluster(app, number - 1);
+        return;
+    }
+
+    if (!compute_clusters(app))
+        return;
+    const tw_similarity *s = &app->clusters;
+    if (s->cluster_count == 0) {
+        fprintf(app->out, "No similar lines (strategy %s, threshold %.2f).\n",
+                tw_strategy_name(s->strategy), s->threshold);
+        return;
+    }
+    size_t lines = s->cluster_start[s->cluster_count];
+    fprintf(app->out, "%zu cluster%s with %zu lines (strategy %s, threshold %.2f):\n",
+            s->cluster_count, plural(s->cluster_count), lines, tw_strategy_name(s->strategy),
+            s->threshold);
+    size_t listed = s->cluster_count < TW_CLUSTERS_LISTED ? s->cluster_count : TW_CLUSTERS_LISTED;
+    pthread_mutex_lock(&app->session.lock);
+    for (size_t k = 0; k < listed; k++) {
+        size_t size = s->cluster_start[k + 1] - s->cluster_start[k];
+        char snippet[TW_SNIPPET_BYTES + 4];
+        const char *text = app->session.doc.lines[s->cluster_lines[s->cluster_start[k]]];
+        size_t len = tw_utf8_prefix_len(text, 48);
+        snprintf(snippet, sizeof snippet, "%.*s%s", (int)len, text, text[len] ? "..." : "");
+        fprintf(app->out, "  #%-3zu %4zu lines  %s\n", k + 1, size, snippet);
+        fprintf(app->out, "        lines ");
+        print_cluster_lines(app, k, 6);
+        fputc('\n', app->out);
+    }
+    pthread_mutex_unlock(&app->session.lock);
+    if (listed < s->cluster_count)
+        fprintf(app->out, "  ... and %zu more.\n", s->cluster_count - listed);
+    fprintf(app->out, "  Type 'clusters N' to see one, 'dedupe' to keep the first line of each, "
+                      "'export FILE' to save a report.\n");
+}
+
+/* dedupe [N [K]]: removes the duplicate lines of every cluster, or of
+ * cluster N, keeping the first line (or line K of the cluster's list). */
+static void cmd_dedupe(tw_app *app, const char *arg, bool force)
+{
+    (void)force;
+    size_t only = 0;
+    size_t keep = 1;
+    char args[64];
+    snprintf(args, sizeof args, "%s", arg);
+    trim_trailing_space(args);
+    const char *p = args;
+    if (*p != '\0') {
+        bool ok = parse_number(&p, &only) && only > 0;
+        if (ok && *p == ' ') {
+            p++;
+            ok = parse_number(&p, &keep) && keep > 0;
+        }
+        if (!ok || *p != '\0') {
+            print_error(app, "usage: dedupe [N [K]]");
+            return;
+        }
+    }
+    if (!clusters_current(app)) {
+        print_error(app, "%s Type 'clusters' first to review what will be removed.",
+                    app->has_clusters ? "the document or the settings changed since 'clusters'."
+                                      : "no clusters yet.");
+        return;
+    }
+    const tw_similarity *s = &app->clusters;
+    if (only > s->cluster_count) {
+        print_error(app, "there is no cluster %zu; %zu were found.", only, s->cluster_count);
+        return;
+    }
+    size_t first_k = only ? only - 1 : 0;
+    size_t last_k = only ? only : s->cluster_count;
+    if (only && keep > tw_similarity_cluster_size(s, first_k)) {
+        print_error(app, "cluster %zu has %zu lines; choose one of them to keep.", only,
+                    tw_similarity_cluster_size(s, first_k));
+        return;
+    }
+    if (s->cluster_count == 0) {
+        fprintf(app->out, "Nothing to remove: no clusters were found.\n");
+        return;
+    }
+
+    pthread_mutex_lock(&app->session.lock);
+    size_t count = app->session.doc.count;
+    bool *drop = calloc(count ? count : 1, sizeof *drop);
+    const char **kept = malloc((count ? count : 1) * sizeof *kept);
+    size_t removed = 0;
+    tw_status status = TW_ERR_NOMEM;
+    if (drop != NULL && kept != NULL) {
+        for (size_t k = first_k; k < last_k; k++) {
+            size_t begin = s->cluster_start[k];
+            size_t size = s->cluster_start[k + 1] - begin;
+            size_t keep_index = only ? keep - 1 : 0;
+            for (size_t i = 0; i < size; i++) {
+                if (i != keep_index) {
+                    drop[s->cluster_lines[begin + i]] = true;
+                    removed++;
+                }
+            }
+        }
+        size_t n = 0;
+        for (size_t i = 0; i < count; i++) {
+            if (!drop[i])
+                kept[n++] = app->session.doc.lines[i];
+        }
+        /* One edit, so a single 'undo' brings every line back. */
+        status = tw_session_edit_locked(&app->session, 0, count, kept, n);
+    }
+    pthread_mutex_unlock(&app->session.lock);
+    free(drop);
+    free(kept);
+
+    if (status != TW_OK) {
+        print_error(app, "cannot remove the duplicates: %s", tw_status_str(status));
+        return;
+    }
+    size_t clusters = last_k - first_k;
+    fprintf(app->out, "Removed %zu line%s from %zu cluster%s. Type 'undo' to bring them back.\n",
+            removed, plural(removed), clusters, plural(clusters));
+}
+
+static void cmd_export(tw_app *app, const char *arg, bool force)
+{
+    (void)force;
+    tw_export_format format;
+    if (!tw_export_format_for(arg, &format)) {
+        print_error(app, "the file name must end in .json, .csv or .html.");
+        return;
+    }
+    if (!ensure_clusters(app))
+        return;
+
+    FILE *file = fopen(arg, "w");
+    if (file == NULL) {
+        char reason[128];
+        print_error(app, "cannot write '%s': %s", arg,
+                    describe(TW_ERR_IO, errno, reason, sizeof reason));
+        return;
+    }
+    pthread_mutex_lock(&app->session.lock);
+    bool ok = tw_export_write(file, format, &app->session.doc, &app->clusters, &app->options,
+                              app->session.path);
+    pthread_mutex_unlock(&app->session.lock);
+    if (fclose(file) != 0)
+        ok = false;
+    if (!ok) {
+        print_error(app, "cannot write '%s'.", arg);
+        return;
+    }
+    const tw_similarity *s = &app->clusters;
+    fprintf(app->out, "Exported %zu cluster%s and %zu pair%s to '%s'.\n", s->cluster_count,
+            plural(s->cluster_count), s->pair_count, plural(s->pair_count), arg);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -967,6 +1278,22 @@ static const command_spec COMMANDS[] = {
      ARGS_NONE,
      false,
      cmd_threads},
+    {{"clusters", "clusters [N]", "Group similar lines, or show cluster N", false},
+     ARGS_WORD_OPTIONAL,
+     false,
+     cmd_clusters},
+    {{"dedupe", "dedupe [N [K]]", "Keep one line per cluster (or line K of cluster N)", false},
+     ARGS_TEXT,
+     false,
+     cmd_dedupe},
+    {{"export", "export FILE", "Save the clusters as .json, .csv or .html", true},
+     ARGS_FILE,
+     false,
+     cmd_export},
+    {{"set", "set [NAME VALUE]", "Show or change the analysis settings", false},
+     ARGS_TEXT,
+     false,
+     cmd_set},
     {{"help", "help", "Show this list", false}, ARGS_NONE, false, cmd_help},
     {{"quit", "quit[!]", "Exit (quit! discards unsaved changes)", false}, ARGS_NONE, true, NULL},
     {{"exit", "exit[!]", "Same as quit", false}, ARGS_NONE, true, NULL},

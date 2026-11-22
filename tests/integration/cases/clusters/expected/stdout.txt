@@ -1,0 +1,47 @@
+TwinLine <version> - type 'help' for the list of commands.
+twinline> Opened 'notes.txt' (8 lines).
+twinline> twinline> threshold set to 0.6.
+twinline> 3 clusters with 7 lines (strategy jaccard, threshold 0.60):
+  #1      3 lines  The quick brown fox jumps over the lazy dog
+        lines 1, 3, 5
+  #2      2 lines  Meeting moved to Thursday at 10am
+        lines 2, 6
+  #3      2 lines  Buy milk, eggs and bread
+        lines 4, 8
+  Type 'clusters N' to see one, 'dedupe' to keep the first line of each, 'export FILE' to save a report.
+twinline> Cluster 1 of 3 (3 lines):
+    1.      1  first   The quick brown fox jumps over the lazy dog
+    2.      3  same    the quick brown fox jumps over the lazy dog!
+    3.      5  J 0.68  The quick brown fox jumped over the lazy dog
+  Type 'dedupe 1' to keep the first line, 'dedupe 1 K' to keep line K of this list.
+twinline> twinline> Exported 3 clusters and 2 pairs to 'report.csv'.
+twinline> twinline> threshold set to 0.5.
+twinline> twinline> 3 clusters with 7 lines (strategy jaccard, threshold 0.50):
+  #1      3 lines  The quick brown fox jumps over the lazy dog
+        lines 1, 3, 5
+  #2      2 lines  Meeting moved to Thursday at 10am
+        lines 2, 6
+  #3      2 lines  Buy milk, eggs and bread
+        lines 4, 8
+  Type 'clusters N' to see one, 'dedupe' to keep the first line of each, 'export FILE' to save a report.
+twinline> Removed 2 lines from 1 cluster. Type 'undo' to bring them back.
+twinline>      1  Meeting moved to Thursday at 10am
+     2  Buy milk, eggs and bread
+     3  The quick brown fox jumped over the lazy dog
+     4  Meeting moved to Thursday at 11am
+     5  Something completely different here
+     6  Buy milk, eggs and bread
+twinline> Undid the replace of lines 1-8.
+twinline> twinline> twinline> twinline> Removed 4 lines from 3 clusters. Type 'undo' to bring them back.
+twinline>      1  The quick brown fox jumps over the lazy dog
+     2  Meeting moved to Thursday at 10am
+     3  Buy milk, eggs and bread
+     4  Something completely different here
+twinline> File     : notes.txt
+Lines    : 4
+Modified : yes
+Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
+Analysis : idle
+twinline> 

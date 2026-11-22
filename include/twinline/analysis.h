@@ -22,6 +22,7 @@
 #include <stddef.h>
 
 #include "twinline/document.h"
+#include "twinline/featureset.h"
 #include "twinline/status.h"
 #include "twinline/utf8.h"
 
@@ -29,14 +30,36 @@
 #define TW_SNIPPET_BYTES     70   /* bytes of a line shown in reports */
 #define TW_MAX_THREADS       256
 
+/* How candidate pairs are found. */
+typedef enum tw_strategy {
+    /* Every pair is scored (with exact pruning unless `exhaustive`). Exact. */
+    TW_STRATEGY_JACCARD = 0,
+    /* Identical lines only, found through a hash table in linear time.
+     * Near duplicates are not looked for. */
+    TW_STRATEGY_EXACT,
+    /* MinHash signatures and LSH bands propose candidates, which are then
+     * scored exactly: no false positives, but a near-duplicate pair can be
+     * missed (rarely, at the default threshold). For large files. */
+    TW_STRATEGY_MINHASH,
+} tw_strategy;
+
+/* "jaccard", "exact", "minhash" */
+const char *tw_strategy_name(tw_strategy strategy);
+
+/* Parses a strategy name; returns false if unknown. */
+bool tw_strategy_parse(const char *name, tw_strategy *out);
+
 typedef struct tw_analysis_options {
     double threshold; /* in (0, 1] */
     tw_fold_mode fold;
     size_t threads;  /* worker threads; 0 means one per online processor */
-    bool exhaustive; /* compare every pair (needed for the mean similarity) */
+    bool exhaustive; /* jaccard: compare every pair (needed for the mean similarity) */
+    tw_strategy strategy;
+    int ngram; /* longest word n-gram in the features, 1..TW_NGRAM_MAX (default 2) */
 } tw_analysis_options;
 
 typedef struct tw_analysis_result {
+    tw_strategy strategy;
     double threshold;             /* threshold used for `near` */
     size_t threads;               /* worker threads used */
     bool exhaustive;              /* every pair was scored */
@@ -44,7 +67,8 @@ typedef struct tw_analysis_result {
     size_t lines_with_words;      /* lines that contain at least one word */
     size_t words_total;           /* words in the whole document */
     unsigned long long pairs;     /* candidate pairs: n(n-1)/2 */
-    unsigned long long compared;  /* pairs actually scored */
+    unsigned long long compared;  /* pairs actually scored (minhash: candidates verified) */
+    size_t unique_lines;          /* exact and minhash: distinct feature sets */
     unsigned long long identical; /* pairs with identical feature sets */
     unsigned long long near;      /* pairs with threshold <= J < 1 */
     double mean_similarity;       /* average J over all pairs; exhaustive only */

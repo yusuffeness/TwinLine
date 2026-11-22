@@ -68,8 +68,27 @@ static void hash_codepoint(uint64_t *hash, uint32_t cp)
 tw_status tw_featureset_builder_build(tw_featureset_builder *builder, const char *line,
                                       tw_fold_mode fold, tw_featureset *view, size_t *word_count)
 {
+    return tw_featureset_builder_build_ngram(builder, line, fold, TW_NGRAM_DEFAULT, view,
+                                             word_count);
+}
+
+/* Order-k n-grams (k >= 3) extend the (k-1)-gram hash; the xor keeps them
+ * apart from pairs that happen to start with the same value. */
+static uint64_t extend_gram(uint64_t gram, uint64_t word, int k)
+{
+    return mix_pair(gram ^ (uint64_t)k, word);
+}
+
+tw_status tw_featureset_builder_build_ngram(tw_featureset_builder *builder, const char *line,
+                                            tw_fold_mode fold, int ngram, tw_featureset *view,
+                                            size_t *word_count)
+{
+    if (ngram < 1)
+        ngram = 1;
+    if (ngram > TW_NGRAM_MAX)
+        ngram = TW_NGRAM_MAX;
     const unsigned char *p = (const unsigned char *)line;
-    uint64_t prev = 0;
+    uint64_t recent[TW_NGRAM_MAX] = {0}; /* hashes of the last words, newest first */
     size_t words = 0;
     size_t count = 0;
 
@@ -96,10 +115,24 @@ tw_status tw_featureset_builder_build(tw_featureset_builder *builder, const char
                 break;
         }
 
-        if (builder_push(builder, &count, hash) != TW_OK ||
-            (words > 0 && builder_push(builder, &count, mix_pair(prev, hash)) != TW_OK))
+        if (builder_push(builder, &count, hash) != TW_OK)
             return TW_ERR_NOMEM;
-        prev = hash;
+        /* The n-grams that end at this word, for n = 2 .. ngram. */
+        for (int k = 2; k <= ngram && (size_t)(k - 1) <= words; k++) {
+            uint64_t gram;
+            if (k == 2) {
+                gram = mix_pair(recent[0], hash); /* the pair hash used since v0.2 */
+            } else {
+                uint64_t head = recent[k - 2]; /* the oldest of the k - 1 previous words */
+                for (int m = k - 3; m >= 0; m--)
+                    head = mix_pair(head, recent[m]);
+                gram = extend_gram(head, hash, k);
+            }
+            if (builder_push(builder, &count, gram) != TW_OK)
+                return TW_ERR_NOMEM;
+        }
+        memmove(recent + 1, recent, (TW_NGRAM_MAX - 1) * sizeof recent[0]);
+        recent[0] = hash;
         words++;
     }
 

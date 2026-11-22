@@ -1,0 +1,25 @@
+open notes.txt
+set
+set strategy minhash
+set ngram 3
+set fold turkish
+set threads 2
+set exhaustive on
+set
+analyze-sync
+set strategy exact
+analyze-sync
+clusters
+set strategy jaccard
+set ngram 1
+set exhaustive off
+analyze-sync
+set bogus 1
+set threshold 2
+set threshold
+set threads 0
+set ngram 9
+set strategy fast
+set exhaustive maybe
+set fold greek
+quit

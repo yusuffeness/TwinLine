@@ -7,7 +7,7 @@
 [![CI](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml/badge.svg)](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/yusuffeness/TwinLine/graph/badge.svg)](https://codecov.io/gh/yusuffeness/TwinLine)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Version](https://img.shields.io/badge/version-0.7.0-blueviolet)
+![Version](https://img.shields.io/badge/version-0.8.0-blueviolet)
 ![Language](https://img.shields.io/badge/language-C17-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -16,11 +16,12 @@
 ---
 
 > [!NOTE]
-> TwinLine is under active development. v0.7.0 makes it a real editor:
-> insert, delete and replace lines, undo and redo, paged viewing with goto
-> and search, several open buffers, and a memory-mapped large-file mode.
-> Advanced analysis (MinHash/LSH, clustering, export) arrives in v0.8.0.
-> Follow the [roadmap](docs/ROADMAP.md) to see what is next.
+> TwinLine is under active development. v0.8.0 adds advanced analysis:
+> three strategies (exact Jaccard, identical lines only, and MinHash + LSH
+> for large files), clusters of similar lines, one-step de-duplication with
+> undo, runtime settings, and JSON, CSV and HTML reports. Services, a config
+> file and a scripting mode arrive in v0.9.0. Follow the
+> [roadmap](docs/ROADMAP.md) to see what is next.
 
 ## What is TwinLine?
 
@@ -134,11 +135,34 @@ the `/` is optional in the plain interface.
 | `cancel`         | Stop the running analysis                                    |
 | `status`         | File, unsaved changes and analysis progress                  |
 | `threads`        | Toggle the per-thread progress panel                         |
+| `clusters [N]`   | Group the similar lines into clusters, or show cluster `N` with each line's similarity |
+| `dedupe [N [K]]` | Keep the first line of every cluster, or of cluster `N` (or its `K`-th line); one `undo` restores everything |
+| `export FILE`    | Save the clusters as `.json`, `.csv` or a colourful `.html` report |
+| `set [NAME VALUE]` | Show or change the settings: `threshold`, `threads`, `strategy`, `exhaustive`, `fold`, `ngram` |
 | `help`           | List the commands                                            |
 | `quit[!]`        | Exit; asks again when any buffer has unsaved changes         |
 
 Undoing back to the last save clears the "modified" mark again, and each
 buffer keeps its own history of up to 1,000 changes.
+
+A typical clean-up session:
+
+```text
+> /clusters
+  ⎿ 3 clusters with 7 lines (strategy jaccard, threshold 0.60):
+      #1      3 lines  The quick brown fox jumps over the lazy dog
+            lines 1, 3, 5
+      ...
+> /clusters 1
+  ⎿ Cluster 1 of 3 (3 lines):
+        1.      1  first   The quick brown fox jumps over the lazy dog
+        2.      3  same    the quick brown fox jumps over the lazy dog!
+        3.      5  J 0.68  The quick brown fox jumped over the lazy dog
+> /dedupe 1 3
+  ⎿ ✔ Removed 2 lines from 1 cluster. Type 'undo' to bring them back.
+> /export report.html
+  ⎿ ✔ Exported 3 clusters and 2 pairs to 'report.html'.
+```
 
 Command-line options:
 
@@ -147,6 +171,9 @@ Command-line options:
 | `--threads=N` | Worker threads for the analysis (default: one per processor) |
 | `--exhaustive` | Compare every pair; slower, but also reports the mean similarity |
 | `--fold=turkish` | Fold `I` to dotless `ı` as in Turkish (default folds it to `i`) |
+| `--threshold=X` | Near-duplicate threshold, above 0 and at most 1 (default 0.70) |
+| `--strategy=NAME` | `jaccard` (exact, default), `exact` (identical lines only) or `minhash` (fast for large files); also `--exact`, `--minhash` |
+| `--ngram=N` | Longest word n-gram compared, 1 to 4 (default 2: words and word pairs) |
 | `--theme=NAME` | Colour theme: `dark` (default), `light`, `dracula`, `nord` |
 | `--no-color` | No colours (the `NO_COLOR` environment variable works too) |
 | `--no-animation` | No animations: still frames, progress updated 4 times a second (`TWINLINE_REDUCE_MOTION=1` works too) |
@@ -177,14 +204,21 @@ back to the plain interface automatically.
 
 Each line becomes a set of word and word-pair (bigram) hashes. Words are
 split on Unicode-aware boundaries and case-folded, so `ÇAY` matches `çay` and
-curly quotes or dashes do not count as letters. Every pair of lines is then
-compared with the Jaccard similarity `|A ∩ B| / |A ∪ B|`; pairs at or above
-0.70 are reported as near duplicates.
+curly quotes or dashes do not count as letters. Two lines are compared with
+the Jaccard similarity `|A ∩ B| / |A ∪ B|`; pairs at or above the threshold
+(0.70 by default) are near duplicates.
 
-The comparison is split across all processor cores, and two exact filters
-skip pairs that provably cannot matter, so the answer is the same as a full
-all-pairs scan, only much faster. The analysis runs on a snapshot of the
-document, so you can keep editing while it runs. Details:
+There are three strategies:
+
+| Strategy | Finds | Cost | Use it for |
+| -------- | ----- | ---- | ---------- |
+| `jaccard` (default) | every near-duplicate pair, exactly | all pairs, with exact pruning | files up to a few MiB |
+| `minhash` | near duplicates; every pair it reports is real, a few may be missed | about linear | large files |
+| `exact` | identical lines only | linear | a quick duplicate check |
+
+All of them run on every processor core and on a snapshot of the document,
+so you can keep editing. Clusters join lines that are similar directly or
+through other lines (union-find). Details:
 [docs/ALGORITHMS.md](docs/ALGORITHMS.md).
 
 ## Performance
@@ -203,6 +237,16 @@ From the original single-threaded algorithm to the default mode on all
 cores, the same analysis runs **56 times faster** with identical results.
 Reproduce the chart on your machine with `make bench`.
 
+With `--minhash`, the same 1 MiB corpus is analysed in **0.03 s** with the
+same counts and the same most similar pair, and a 100 MiB file (1.6 million
+lines) in about 7 s on a 2-core virtual machine. MinHash recall against the
+exact search on the 1 MiB corpus, measured with `make bench-accuracy`:
+
+| Threshold | True pairs | Found by MinHash | Recall | Precision |
+| --------- | ---------- | ---------------- | ------ | --------- |
+| 0.5 | 289 | 287 | 99.3% | 100% |
+| 0.7 | 126 | 126 | 100% | 100% |
+
 Files of 8 MiB and more open in **large-file mode**: the file is mapped into
 memory and split into lines in place, so no line is copied or allocated on
 its own. On a 100 MiB file (1.6 million lines) loading takes 0.063 s instead
@@ -210,13 +254,7 @@ of 0.105 s (1.7x); `bench_load FILE` measures it on your machine.
 
 ## Planned features
 
-- **Background analysis** that never blocks the editor: analysis runs on a
-  snapshot of the document while you continue to edit.
-- **Parallel engine**: all-pairs Jaccard similarity split across worker
-  threads, plus MinHash + LSH for very large files.
-- **Unicode-aware** tokenisation, including Turkish case folding.
-- **Side-by-side view** of all near-duplicate pairs, clustering and
-  interactive de-duplication.
+- **Side-by-side view** of all near-duplicate pairs.
 - **Scriptable mode** with JSON output and meaningful exit codes.
 - Autosave with crash recovery, file watching, themes and a TOML config file.
 

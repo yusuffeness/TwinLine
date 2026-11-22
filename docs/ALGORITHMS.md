@@ -169,3 +169,60 @@ Saving writes a new file and renames it over the old one, so the mapping
 (which still refers to the old file) stays valid. As with any memory-mapped
 file, another program truncating the file while it is open can make TwinLine
 fail; editors usually accept that trade-off for large files.
+
+## 9. Strategies for large files
+
+The pairwise search of sections 3-5 is exact but quadratic: a file with ten
+times the lines has a hundred times the pairs. Two other strategies trade
+generality for speed. Both start the same way.
+
+**Identical lines.** Each feature set is hashed, the lines are sorted by
+(size, hash) and equal sets end up next to each other, where they are
+compared byte for byte. Every group becomes one distinct text, represented
+by its first line. `k` copies of a text contribute `k(k-1)/2` identical
+pairs. The `exact` strategy stops here: it finds every identical pair in
+`O(n log n)` and does not look for near duplicates.
+
+**MinHash.** For a random hash function `h`, the smallest `h` over a set is
+the same for two sets with probability `J(A, B)`. TwinLine computes 128
+such minimums per distinct text (its signature) with multiply-add hash
+functions over the mixed feature hashes.
+
+**LSH bands.** The signature is cut into 32 bands of 4 values, and each band
+is hashed into a 32-bit key. Two texts become candidates if any band key is
+equal, which happens with probability
+
+```
+P(J) = 1 - (1 - J^4)^32
+```
+
+| J | 0.3 | 0.5 | 0.6 | 0.7 | 0.8 | 0.9 |
+| - | --- | --- | --- | --- | --- | --- |
+| P | 23% | 87% | 98.8% | 99.98% | > 99.999% | > 99.999% |
+
+Each band is sorted with a radix sort, and texts with the same key are
+paired. A pair that already met in an earlier band is skipped, so it is
+scored once. Every candidate is then scored with the exact Jaccard
+similarity and the same size bound as the pairwise search. A reported pair
+is therefore always truly similar: errors can only be misses, and those are
+rare above J = 0.6. `bench_accuracy` measures the recall against the exact
+search: 100% at 0.7 and 99.3% at 0.5 on the 1 MiB corpus.
+
+The cost is linear in the number of distinct texts for the signatures, plus
+32 sorts and the candidates of each bucket. On the 1 MiB corpus it gives the
+same counts and the same most similar pair as the exact search, 39 times
+faster.
+
+## 10. Clusters
+
+Similarity is not transitive: A can be like B and B like C while A and C
+differ. A cluster is a connected group: lines joined by a chain of similar
+pairs, plus all copies of each text. TwinLine builds the clusters with
+union-find over the distinct texts (path halving, the smaller index as the
+root, so the result does not depend on the order of the pairs). Clusters are
+listed largest first, then by their first line.
+
+`dedupe` keeps one line per cluster and removes the others in a single edit
+(section 8), so one `undo` brings them all back. The clusters belong to the
+document state and settings they were computed with: after a change,
+`dedupe` asks for `clusters` again rather than act on stale line numbers.

@@ -11,7 +11,7 @@ SOURCES     := $(shell find src include tests bench -name '*.[ch]' 2>/dev/null)
 
 .DEFAULT_GOAL := build
 
-.PHONY: help build debug release test asan tsan coverage bench bench-large run install corpus clean format format-check tidy
+.PHONY: help build debug release test asan tsan coverage bench bench-large bench-accuracy run install corpus clean format format-check tidy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -60,6 +60,14 @@ bench-large: release ## Benchmark a 10 MiB corpus (pruned mode only; takes a few
 	@mkdir -p bench/results
 	./$(BUILD_DIR)/bench/bench_analysis --repeat=1 --modes=pruned \
 		--csv=bench/results/benchmark-10MiB.csv corpus/corpus-10MiB.txt
+
+bench-accuracy: release ## MinHash recall and speed against exact Jaccard (1 MiB, three thresholds)
+	$(MAKE) corpus
+	@mkdir -p bench/results
+	@for t in 0.5 0.7 0.9; do \
+		./$(BUILD_DIR)/bench/bench_accuracy --threshold=$$t --csv=bench/results/accuracy-$$t.csv \
+			corpus/corpus-1MiB.txt || exit 1; \
+	done
 
 run: build ## Build and run twinline
 	./$(BUILD_DIR)/twinline
