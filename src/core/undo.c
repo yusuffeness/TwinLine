@@ -103,7 +103,9 @@ tw_status tw_undo_apply(tw_undo *undo, tw_document *doc, size_t at, size_t remov
 
     tw_edit edit = {at, NULL, remove, NULL, count, 0};
     bool ok = true;
-    edit.before = copy_lines((const char *const *)(doc->lines + at), remove, &ok);
+    /* An empty document may have no line array yet: no pointer arithmetic on NULL. */
+    const char *const *removed = remove > 0 ? (const char *const *)&doc->lines[at] : NULL;
+    edit.before = copy_lines(removed, remove, &ok);
     if (ok)
         edit.after = copy_lines(texts, count, &ok);
     if (!ok) {
