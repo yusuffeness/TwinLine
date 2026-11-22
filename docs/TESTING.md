@@ -99,7 +99,8 @@ rendered and checked in a test.
 types keys (menus, Tab completion, history search, paste, Ctrl+C) and waits
 for the expected text on the screen. It also edits a line through `/edit`,
 undoes the change, searches, switches to the minhash strategy, lists the
-clusters and opens a second buffer. The first session runs with animations
+clusters, checks that escape sequences in a document are shown as text
+instead of reaching the terminal, and opens a second buffer. The first session runs with animations
 and the second with `--no-animation`, so both drawing paths are covered. It needs a POSIX system and runs in CI
 on Linux and macOS, also under the sanitizers and Valgrind
 (`TWINLINE_TUI_TIMEOUT` raises its time limit for slow runs).
@@ -151,4 +152,8 @@ Run it with address-space randomisation disabled:
 | Benchmark | Analysis timings compared with the last run on `main`, and the MinHash accuracy check: fails if MinHash reports a pair that is not similar or the strategies disagree on identical lines |
 
 `.github/workflows/codeql.yml` runs GitHub CodeQL weekly and on every change
-to `main` once the repository is public.
+to `main`.
+
+`.github/workflows/release.yml` builds every release on all four platforms
+from the tag and runs the whole test suite there before anything is
+published.
