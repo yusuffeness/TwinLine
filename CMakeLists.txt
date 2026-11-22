@@ -68,6 +68,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
               -Wmissing-prototypes
               -Wformat=2
               -Wundef
+              -Wframe-larger-than=65536
               $<$<BOOL:${TWINLINE_WARNINGS_AS_ERRORS}>:-Werror>)
 
   set(_tw_sanitizers "")

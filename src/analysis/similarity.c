@@ -345,20 +345,24 @@ typedef struct band_entry {
     uint32_t set;
 } band_entry;
 
+/* Buckets per radix pass. The counts live on the heap: 64 Ki of them are
+ * 512 KiB, the whole default stack of a secondary thread on macOS. */
+#define RADIX_BUCKETS ((size_t)1 << 16)
+
 /*
  * Sorts `n` entries by key with a stable two-pass radix sort (16 bits per
- * pass) through `tmp`; entries with equal keys keep their order. Much faster
- * than qsort for the millions of entries of a large file.
+ * pass) through `tmp`, using `count` (RADIX_BUCKETS slots) as scratch;
+ * entries with equal keys keep their order. Much faster than qsort for the
+ * millions of entries of a large file.
  */
-static void radix_sort(band_entry *entries, band_entry *tmp, size_t n)
+static void radix_sort(band_entry *entries, band_entry *tmp, size_t *count, size_t n)
 {
-    size_t count[1u << 16];
     for (unsigned shift = 0; shift < 32; shift += 16) {
-        memset(count, 0, sizeof count);
+        memset(count, 0, RADIX_BUCKETS * sizeof *count);
         for (size_t i = 0; i < n; i++)
             count[(entries[i].key >> shift) & 0xFFFFu]++;
         size_t sum = 0;
-        for (size_t d = 0; d < (1u << 16); d++) {
+        for (size_t d = 0; d < RADIX_BUCKETS; d++) {
             size_t c = count[d];
             count[d] = sum;
             sum += c;
@@ -382,8 +386,10 @@ static bool met_before(const uint32_t *keys, size_t x, size_t y, size_t band)
 }
 
 /* Scores every pair of sets that fall into the same bucket of one band.
- * `scratch` and `tmp` hold one band_entry per set each. */
-static void minhash_band(searcher *self, size_t band, band_entry *scratch, band_entry *tmp)
+ * `scratch` and `tmp` hold one band_entry per set each; `count` holds
+ * RADIX_BUCKETS counters. */
+static void minhash_band(searcher *self, size_t band, band_entry *scratch, band_entry *tmp,
+                         size_t *count)
 {
     const shared_search *search = self->search;
     size_t n = search->u->count;
@@ -391,7 +397,7 @@ static void minhash_band(searcher *self, size_t band, band_entry *scratch, band_
         scratch[x].key = search->keys[x * TW_MINHASH_BANDS + band];
         scratch[x].set = (uint32_t)x;
     }
-    radix_sort(scratch, tmp, n);
+    radix_sort(scratch, tmp, count, n);
 
     for (size_t start = 0; start < n;) {
         size_t end = start + 1;
@@ -417,6 +423,7 @@ static void *search_main(void *arg)
     shared_search *search = self->search;
     size_t n = search->u->count;
     band_entry *scratch = NULL;
+    size_t *count = NULL;
 
     /* jaccard: chunks of rows; minhash: one band at a time (the signatures
      * are complete before the searchers start). */
@@ -440,17 +447,19 @@ static void *search_main(void *arg)
         } else {
             if (scratch == NULL) {
                 scratch = malloc(2 * (n ? n : 1) * sizeof *scratch);
-                if (scratch == NULL) {
+                count = malloc(RADIX_BUCKETS * sizeof *count);
+                if (scratch == NULL || count == NULL) {
                     self->failed = true;
                     break;
                 }
             }
             for (size_t band = start; band < end; band++) {
-                minhash_band(self, band, scratch, scratch + n);
+                minhash_band(self, band, scratch, scratch + n, count);
                 report_progress(self, n);
             }
         }
     }
+    free(count);
     free(scratch);
     return NULL;
 }
