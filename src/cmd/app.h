@@ -33,13 +33,34 @@ typedef void (*tw_emit_fn)(struct tw_app *app, const char *text, bool is_error);
  */
 typedef void (*tw_result_fn)(struct tw_app *app, const tw_analysis_result *result);
 
+/*
+ * Optional: puts `text` into the input line for the user to change (used by
+ * "edit"). Called on the main thread while a command runs. When NULL, "edit"
+ * prints the line instead.
+ */
+typedef void (*tw_prefill_fn)(struct tw_app *app, const char *text);
+
+/* Around highlighted text in command output when tw_app.marks is set. */
+#define TW_MARK_ON  "\x1e"
+#define TW_MARK_OFF "\x1f"
+
 typedef struct tw_app {
     FILE *out; /* where commands write results (stdout by default) */
     FILE *err; /* where commands write errors (stderr by default) */
     tw_emit_fn emit;
     tw_result_fn on_result;
-    void *ui; /* owned by the active front end, may be NULL */
-    tw_session session;
+    tw_prefill_fn prefill;
+    bool marks;         /* wrap highlights (find matches) in TW_MARK_ON / TW_MARK_OFF */
+    void *ui;           /* owned by the active front end, may be NULL */
+    tw_session session; /* holds the active buffer */
+
+    /* Open buffers, numbered from 1 for the user. The active one lives in
+     * `session`; its slot here is an empty placeholder. Changed and read
+     * only with session.lock held. */
+    tw_buffer *buffers;
+    size_t buffer_count;
+    size_t current;
+
     tw_analysis_job job;
     tw_analysis_options options;
     bool quit_armed;                    /* "quit" was typed once with unsaved changes */
@@ -50,6 +71,9 @@ typedef struct tw_app {
 
 tw_status tw_app_init(tw_app *app);
 void tw_app_destroy(tw_app *app);
+
+/* Number of buffers with unsaved changes. Takes session.lock. */
+size_t tw_app_dirty_buffers(tw_app *app);
 
 /* tw_emit_fn for the plain REPL: prints the text, then the prompt again. */
 void tw_app_emit_plain(tw_app *app, const char *text, bool is_error);

@@ -4,10 +4,13 @@
 #include "twinline/fileio.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -22,10 +25,94 @@ static void strip_line_ending(char *buf, size_t *len)
         buf[--*len] = '\0';
 }
 
+/*
+ * Splits a private, writable mapping of the whole file into lines in place:
+ * each line terminator becomes a NUL. A last line without a terminator has
+ * no room for one inside the mapping, so it is copied.
+ */
+static tw_status split_mapping(char *map, size_t size, tw_document *doc)
+{
+    char *p = map;
+    char *end = map + size;
+    if (size >= 3 && memcmp(map, TW_UTF8_BOM, 3) == 0)
+        p += 3;
+
+    while (p < end) {
+        char *nl = memchr(p, '\n', (size_t)(end - p));
+        size_t len = (size_t)((nl != NULL ? nl : end) - p);
+        while (len > 0 && p[len - 1] == '\r')
+            len--;
+
+        tw_status status;
+        if (nl != NULL || len < (size_t)(end - p)) {
+            p[len] = '\0'; /* overwrites the '\n' or a '\r' */
+            status = tw_document_push(doc, p);
+        } else {
+            char *copy = malloc(len + 1);
+            if (copy == NULL)
+                return TW_ERR_NOMEM;
+            memcpy(copy, p, len);
+            copy[len] = '\0';
+            status = tw_document_push(doc, copy);
+            if (status != TW_OK)
+                free(copy);
+        }
+        if (status != TW_OK)
+            return status;
+        if (nl == NULL)
+            break;
+        p = nl + 1;
+    }
+    return TW_OK;
+}
+
+/* Returns true and fills `out` when the file was mapped; false to fall back. */
+static bool load_mapped(const char *path, size_t threshold, tw_document *out, tw_status *status,
+                        int *err_no)
+{
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return false; /* the stdio path reports the error */
+    struct stat st;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size <= 0 ||
+        (uintmax_t)st.st_size < threshold || (uintmax_t)st.st_size > SIZE_MAX) {
+        close(fd);
+        return false;
+    }
+    size_t size = (size_t)st.st_size;
+    void *map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    close(fd); /* the mapping stays valid */
+    if (map == MAP_FAILED)
+        return false;
+
+    tw_document doc;
+    tw_document_init(&doc);
+    doc.map = map;
+    doc.map_len = size;
+    *status = split_mapping(map, size, &doc);
+    if (*status != TW_OK) {
+        tw_document_free(&doc); /* also unmaps */
+        *err_no = 0;
+        return true;
+    }
+    *out = doc;
+    return true;
+}
+
 tw_status tw_file_load(const char *path, tw_document *out, int *err_no)
+{
+    return tw_file_load_ex(path, out, err_no, TW_MMAP_THRESHOLD);
+}
+
+tw_status tw_file_load_ex(const char *path, tw_document *out, int *err_no, size_t mmap_threshold)
 {
     *err_no = 0;
     tw_document_init(out);
+
+    tw_status mapped_status = TW_OK;
+    if (mmap_threshold != SIZE_MAX &&
+        load_mapped(path, mmap_threshold, out, &mapped_status, err_no))
+        return mapped_status;
 
     FILE *file = fopen(path, "r");
     if (file == NULL) {

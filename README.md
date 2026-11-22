@@ -7,7 +7,7 @@
 [![CI](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml/badge.svg)](https://github.com/yusuffeness/TwinLine/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/yusuffeness/TwinLine/graph/badge.svg)](https://codecov.io/gh/yusuffeness/TwinLine)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
-![Version](https://img.shields.io/badge/version-0.6.0-blueviolet)
+![Version](https://img.shields.io/badge/version-0.7.0-blueviolet)
 ![Language](https://img.shields.io/badge/language-C17-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -16,11 +16,11 @@
 ---
 
 > [!NOTE]
-> TwinLine is under active development. v0.6.0 brings the terminal UI to
-> life: a live progress view with per-thread bars, animated result cards with
-> a word diff, and toasts, all drawn by a render thread that sleeps when
-> nothing moves. Editing features arrive in v0.7.0. Follow the
-> [roadmap](docs/ROADMAP.md) to see what is next.
+> TwinLine is under active development. v0.7.0 makes it a real editor:
+> insert, delete and replace lines, undo and redo, paged viewing with goto
+> and search, several open buffers, and a memory-mapped large-file mode.
+> Advanced analysis (MinHash/LSH, clustering, export) arrives in v0.8.0.
+> Follow the [roadmap](docs/ROADMAP.md) to see what is next.
 
 ## What is TwinLine?
 
@@ -95,19 +95,50 @@ TwinLine uses no CPU.
 Commands are typed with a leading `/` in the terminal UI (`/open notes.txt`);
 the `/` is optional in the plain interface.
 
+**Files and buffers**
+
 | Command          | Description                                                  |
 | ---------------- | ------------------------------------------------------------ |
 | `open[!] FILE`   | Load a file (`open!` discards unsaved changes)               |
-| `append TEXT`    | Add a line at the end                                        |
-| `show`           | Print the document with line numbers                         |
 | `save [FILE]`    | Save atomically to `FILE` or to the current file             |
+| `new [FILE]`     | Open a new buffer, empty or with `FILE`                      |
+| `buffers`        | List the open buffers                                        |
+| `switch N`       | Make buffer `N` the active one                               |
+| `close[!]`       | Close the active buffer (`close!` discards its changes)      |
+
+**Editing**
+
+| Command          | Description                                                  |
+| ---------------- | ------------------------------------------------------------ |
+| `append TEXT`    | Add a line at the end                                        |
+| `insert N TEXT`  | Insert a line so that it becomes line `N`                    |
+| `delete N[-M]`   | Delete line `N`, or lines `N` to `M`                         |
+| `replace N TEXT` | Replace line `N`                                             |
+| `edit N`         | Put line `N` into the input box to change it (prints it in the plain interface) |
+| `undo`, `redo`   | Step back and forward through the changes                    |
+
+**Viewing**
+
+| Command          | Description                                                  |
+| ---------------- | ------------------------------------------------------------ |
+| `show [N[-M]]`   | Print the next page of 40 lines, a page from line `N`, or lines `N`-`M`; `show!` prints everything |
+| `goto N`         | Show line `N` with three lines around it; the next `show` starts there |
+| `find TEXT`      | List the lines containing `TEXT`, ignoring case (matches are highlighted in the terminal UI) |
+
+**Analysis and the rest**
+
+| Command          | Description                                                  |
+| ---------------- | ------------------------------------------------------------ |
 | `analyze`        | Find near-duplicate lines in the background                  |
 | `analyze-sync`   | Same, but wait for the result                                |
 | `cancel`         | Stop the running analysis                                    |
 | `status`         | File, unsaved changes and analysis progress                  |
 | `threads`        | Toggle the per-thread progress panel                         |
 | `help`           | List the commands                                            |
-| `quit[!]`        | Exit; asks again when there are unsaved changes              |
+| `quit[!]`        | Exit; asks again when any buffer has unsaved changes         |
+
+Undoing back to the last save clears the "modified" mark again, and each
+buffer keeps its own history of up to 1,000 changes.
 
 Command-line options:
 
@@ -171,6 +202,11 @@ i7-13620H:
 From the original single-threaded algorithm to the default mode on all
 cores, the same analysis runs **56 times faster** with identical results.
 Reproduce the chart on your machine with `make bench`.
+
+Files of 8 MiB and more open in **large-file mode**: the file is mapped into
+memory and split into lines in place, so no line is copied or allocated on
+its own. On a 100 MiB file (1.6 million lines) loading takes 0.063 s instead
+of 0.105 s (1.7x); `bench_load FILE` measures it on your machine.
 
 ## Planned features
 

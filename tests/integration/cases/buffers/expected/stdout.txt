@@ -1,0 +1,41 @@
+TwinLine <version> - type 'help' for the list of commands.
+twinline> Opened 'a.txt' (2 lines).
+twinline> >  1  a.txt                             2 lines
+twinline> Buffer 2: opened 'b.txt' (1 line).
+twinline>    1  a.txt                             2 lines
+>  2  b.txt                             1 line
+twinline> Line 2 added.
+twinline> Switched to buffer 1: a.txt (2 lines).
+twinline> File     : a.txt
+Lines    : 2
+Modified : no
+Buffer   : 1 of 2
+Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
+Analysis : idle
+twinline> >  1  a.txt                             2 lines
+   2  b.txt                             2 lines  modified
+twinline> Switched to buffer 2: b.txt (2 lines).
+twinline>      1  bravo
+     2  extra
+twinline> Switched to buffer 1: a.txt (2 lines).
+twinline> twinline> Buffer 3: new empty document.
+twinline>    1  a.txt                             2 lines
+   2  b.txt                             2 lines  modified
+>  3  (untitled)                        0 lines
+twinline> Closed (untitled). Now in buffer 2: b.txt.
+twinline> twinline> Closed b.txt. Now in buffer 1: a.txt.
+twinline> >  1  a.txt                             2 lines
+twinline> Closed a.txt; the buffer is now empty.
+twinline> File     : (no file)
+Lines    : 0
+Modified : no
+Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
+Analysis : idle
+twinline> twinline> Buffer 2: new empty document.
+twinline> Line 1 added.
+twinline> Switched to buffer 1: (untitled) (0 lines).
+twinline> twinline> 

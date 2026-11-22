@@ -186,6 +186,22 @@ def session_two(argv: list[str], tmp: str) -> None:
     s.read_until("pasted line")
     s.read_until("abc Xdef")
 
+    s.send("/edit 1\r")             # the line comes back in the input box
+    s.read_until("Editing line 1")
+    s.read_until("> /replace 1 draft-two.txt")
+    s.send(" again\r")
+    s.read_until("Line 1 replaced.")
+    s.send("/undo\r")
+    s.read_until("Undid the replace of line 1.")
+    s.send("/find PASTED\r")         # case-insensitive search
+    s.read_until("1 match in 1 line.")
+
+    s.send("/new\r")                 # a second buffer shows in the status bar
+    s.read_until("Buffer 2: new empty document.")
+    s.read_until("(untitled) [2/2]")
+    s.send("/switch 1\r")
+    s.read_until("Switched to buffer 1")
+
     s.send("/quit!\r")
     code = s.wait_exit()
     assert code == 0, f"exit status {code}"

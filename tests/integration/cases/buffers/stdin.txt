@@ -1,0 +1,26 @@
+open a.txt
+buffers
+new b.txt
+buffers
+append extra
+switch 1
+status
+buffers
+switch 2
+show
+switch 1
+switch 3
+new
+buffers
+close
+close
+close!
+buffers
+close
+status
+new missing.txt
+new
+append dirty
+switch 1
+quit
+quit

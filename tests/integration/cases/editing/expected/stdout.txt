@@ -1,0 +1,50 @@
+TwinLine <version> - type 'help' for the list of commands.
+twinline> Line 1 added.
+twinline> Line 2 added.
+twinline> Line 3 added.
+twinline> Line 1 inserted.
+twinline> Line 5 inserted.
+twinline> Line 3 replaced.
+twinline> Line 2 deleted.
+twinline>      1  first line
+     2  BETA changed
+     3  gamma
+     4  last line
+twinline> Undid the delete of line 2.
+twinline> Undid the replace of line 3.
+twinline>      1  first line
+     2  alpha
+     3  beta
+     4  gamma
+     5  last line
+twinline> Redid the replace of line 3.
+twinline> File     : (no file)
+Lines    : 5
+Modified : yes
+Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
+Analysis : idle
+twinline> Lines 2-3 deleted.
+twinline>      1  first line
+     2  gamma
+     3  last line
+twinline> Undid the delete of lines 2-3.
+twinline> Undid the replace of line 3.
+twinline> Undid the insert of 1 line at line 5.
+twinline> Undid the insert of 1 line at line 1.
+twinline> Undid the insert of 1 line at line 3.
+twinline> Undid the insert of 1 line at line 2.
+twinline> Undid the insert of 1 line at line 1.
+twinline> File     : (no file)
+Lines    : 0
+Modified : no
+Folding  : default
+Threads  : <auto> (one per processor)
+Mode     : pruned
+Analysis : idle
+twinline> Nothing to undo.
+twinline> Redid the insert of 1 line at line 1.
+twinline> twinline> twinline> twinline> twinline> twinline> twinline> twinline> twinline> twinline>      1  alpha
+To change it, type: replace 1 TEXT
+twinline> 

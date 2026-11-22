@@ -105,6 +105,61 @@ TW_TEST(swap_exchanges_contents)
     tw_document_free(&b);
 }
 
+static bool fill(tw_document *doc, const char *const *texts, size_t n)
+{
+    tw_document_init(doc);
+    return tw_document_splice_copy(doc, 0, 0, texts, n) == TW_OK;
+}
+
+TW_TEST(splice_inserts_removes_and_replaces)
+{
+    static const char *const abc[] = {"a", "b", "c"};
+    tw_document doc;
+    TW_CHECK(fill(&doc, abc, 3));
+
+    static const char *const xy[] = {"x", "y"};
+    TW_CHECK_EQ_INT(tw_document_splice_copy(&doc, 1, 0, xy, 2), TW_OK); /* a x y b c */
+    TW_CHECK_EQ_SIZE(doc.count, 5);
+    TW_CHECK_EQ_STR(doc.lines[1], "x");
+    TW_CHECK_EQ_STR(doc.lines[3], "b");
+
+    TW_CHECK_EQ_INT(tw_document_splice_copy(&doc, 2, 2, NULL, 0), TW_OK); /* a x c */
+    TW_CHECK_EQ_SIZE(doc.count, 3);
+    TW_CHECK_EQ_STR(doc.lines[2], "c");
+
+    static const char *const z[] = {"z"};
+    TW_CHECK_EQ_INT(tw_document_splice_copy(&doc, 0, 3, z, 1), TW_OK); /* z */
+    TW_CHECK_EQ_SIZE(doc.count, 1);
+    TW_CHECK_EQ_STR(doc.lines[0], "z");
+
+    TW_CHECK_EQ_INT(tw_document_splice_copy(&doc, 1, 0, abc, 3), TW_OK); /* at the end */
+    TW_CHECK_EQ_STR(doc.lines[3], "c");
+    tw_document_free(&doc);
+}
+
+TW_TEST(splice_rejects_bad_ranges)
+{
+    static const char *const ab[] = {"a", "b"};
+    tw_document doc;
+    TW_CHECK(fill(&doc, ab, 2));
+    TW_CHECK_EQ_INT(tw_document_splice_copy(&doc, 3, 0, ab, 1), TW_ERR_INVALID);
+    TW_CHECK_EQ_INT(tw_document_splice_copy(&doc, 1, 2, NULL, 0), TW_ERR_INVALID);
+    TW_CHECK_EQ_INT(tw_document_splice(&doc, 2, 1, NULL, 0), TW_ERR_INVALID);
+    TW_CHECK_EQ_SIZE(doc.count, 2);
+    tw_document_free(&doc);
+}
+
+TW_TEST(splice_grows_past_capacity)
+{
+    static const char *const one[] = {"line"};
+    tw_document doc;
+    tw_document_init(&doc);
+    for (int i = 0; i < 300; i++)
+        TW_CHECK_EQ_INT(tw_document_splice_copy(&doc, 0, 0, one, 1), TW_OK);
+    TW_CHECK_EQ_SIZE(doc.count, 300);
+    tw_document_free(&doc);
+}
+
 int main(void)
 {
     puts("document");
@@ -115,5 +170,8 @@ int main(void)
     TW_RUN(clone_is_deep);
     TW_RUN(clone_of_empty_document);
     TW_RUN(swap_exchanges_contents);
+    TW_RUN(splice_inserts_removes_and_replaces);
+    TW_RUN(splice_rejects_bad_ranges);
+    TW_RUN(splice_grows_past_capacity);
     return tw_test_summary();
 }

@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-22
+
+### Added
+
+- Editing commands: `insert N TEXT`, `delete N[-M]`, `replace N TEXT` and
+  `edit N`, which puts the line into the terminal UI's input box (the plain
+  interface prints it).
+- `undo` and `redo` for every change, up to 1,000 per buffer. Undoing back
+  to the last save clears the "modified" mark.
+- Paged viewing: `show` prints 40 lines at a time and continues where it
+  stopped, `show N` starts a page at line `N`, `show N-M` prints a range and
+  `show!` everything. Documents of up to 40 lines are printed whole.
+- `goto N` shows a line in context and moves the next page there.
+- `find TEXT`: case-insensitive search using the same Unicode case folding
+  as the analysis (including `--fold=turkish`); matches are highlighted in
+  the terminal UI.
+- Several open buffers: `new [FILE]`, `buffers`, `switch N` and `close[!]`.
+  The status bar shows the buffer number when more than one is open, and
+  `quit` warns about unsaved changes in any buffer.
+- Large-file mode: files of 8 MiB and more are memory-mapped and split in
+  place, about 1.7x faster to load and without an allocation per line.
+  `status` reports it.
+- `bench_load`, which compares the two ways of loading a file.
+- Unit tests for splicing documents, undo and redo, the saved state and
+  memory-mapped loading; integration tests for editing, viewing and buffers.
+
+### Changed
+
+- All document changes go through one splice operation, recorded by the
+  undo history.
+- `help` groups the commands into files and buffers, editing, viewing and
+  analysis.
+
 ## [0.6.0] - 2026-11-22
 
 ### Added
@@ -198,7 +231,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.clang-format` and `.clang-tidy`.
 - MIT license, README and roadmap.
 
-[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/yusuffeness/TwinLine/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/yusuffeness/TwinLine/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/yusuffeness/TwinLine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/yusuffeness/TwinLine/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/yusuffeness/TwinLine/compare/v0.3.0...v0.4.0

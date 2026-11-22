@@ -6,6 +6,7 @@ set(TWINLINE_UNIT_TESTS
     utf8
     featureset
     document
+    undo
     fileio
     analysis
     parallel

@@ -1,0 +1,9 @@
+error: there is no line 2; the document has 1 line.
+error: cannot insert at line 0; use a line from 1 to 2.
+error: cannot insert at line 99; use a line from 1 to 2.
+error: there is no line 9; the document has 1 line.
+error: lines 3-2 are not in the document (1-1).
+error: there is no line 7; the document has 1 line.
+error: usage: replace N TEXT
+error: usage: edit N
+error: usage: delete N[-M]

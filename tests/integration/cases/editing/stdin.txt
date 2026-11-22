@@ -1,0 +1,36 @@
+append alpha
+append beta
+append gamma
+insert 1 first line
+insert 5 last line
+replace 3 BETA changed
+delete 2
+show
+undo
+undo
+show
+redo
+status
+delete 2-3
+show
+undo
+undo
+undo
+undo
+undo
+undo
+undo
+status
+undo
+redo
+edit 2
+insert 0 x
+insert 99 x
+delete 9
+delete 3-2
+replace 7 x
+replace x
+edit
+delete a-b
+edit 1
+quit!

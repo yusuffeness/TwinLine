@@ -80,11 +80,11 @@ and leaves the repository in a working, presentable state.
 
 ## Milestone 6 - Editing features (v0.7.0)
 
-- [ ] Insert, delete, replace and inline edit
-- [ ] Paged show, goto and find
-- [ ] Undo and redo
-- [ ] Multiple buffers
-- [ ] Large-file mode with `mmap`
+- [x] Insert, delete, replace and inline edit
+- [x] Paged show, goto and find
+- [x] Undo and redo
+- [x] Multiple buffers
+- [x] Large-file mode with `mmap`
 
 ## Milestone 7 - Advanced analysis (v0.8.0)
 

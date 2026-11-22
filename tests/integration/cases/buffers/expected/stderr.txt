@@ -1,0 +1,4 @@
+error: there is no buffer 3; 2 are open. Type 'buffers' to list them.
+error: this buffer has unsaved changes. Save them, or use 'close!' to discard them.
+error: cannot open 'missing.txt': No such file or directory
+warning: another buffer has unsaved changes. Type 'quit' again to discard them, or 'buffers' to see it.

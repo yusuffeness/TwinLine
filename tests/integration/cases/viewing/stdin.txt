@@ -1,0 +1,19 @@
+open many.txt
+show
+show
+show
+show
+show 95
+show 10-12
+show 0
+show 99-101
+goto 50
+show
+goto 1
+goto 100
+find istanbul
+find café
+find Line 1
+find zebra
+find
+quit

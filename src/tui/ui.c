@@ -64,6 +64,7 @@ typedef struct tw_ui {
     size_t search_match;
     bool search_found;
     char *search_saved;
+    char *prefill; /* text "edit" asked to put into the input line */
 
     menu_kind menu;
     bool menu_dismissed;
@@ -240,7 +241,12 @@ static void build_view(tw_ui *ui, double now, tw_view *view, tw_activity *activi
     view->hint = ui->hint[0] ? ui->hint : NULL;
 
     pthread_mutex_lock(&app->session.lock);
-    if (app->session.path != NULL) {
+    if (app->buffer_count > 1) {
+        snprintf(file, file_size, "%s [%zu/%zu]",
+                 app->session.path != NULL ? app->session.path : "(untitled)", app->current + 1,
+                 app->buffer_count);
+        view->file = file;
+    } else if (app->session.path != NULL) {
         snprintf(file, file_size, "%s", app->session.path);
         view->file = file;
     }
@@ -429,6 +435,26 @@ static void show_toast(tw_ui *ui, tw_toast_kind kind, const char *text)
 
 /* ---------------------------------------------------------- formatting */
 
+/* Appends `len` bytes of `text`, drawing the TW_MARK_ON ... TW_MARK_OFF
+ * spans (search matches, the goto line) as highlighted. */
+static void append_marked(tw_ui *ui, tw_strbuf *sb, const char *text, size_t len)
+{
+    tw_style mark = tw_style_fg(tw_rgb_hex(0x111118), TW_STYLE_BOLD | TW_STYLE_BG);
+    mark.bg = ui->theme->accent2;
+    size_t start = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (text[i] != TW_MARK_ON[0] && text[i] != TW_MARK_OFF[0])
+            continue;
+        tw_strbuf_append_n(sb, text + start, i - start);
+        if (text[i] == TW_MARK_ON[0])
+            tw_style_render(mark, ui->color, sb);
+        else
+            tw_strbuf_append(sb, RESET);
+        start = i + 1;
+    }
+    tw_strbuf_append_n(sb, text + start, len - start);
+}
+
 /* Appends `text` line by line, each line prefixed with the tree glyph. */
 static void format_lines(tw_ui *ui, tw_strbuf *sb, const char *text, bool error, bool single_ok)
 {
@@ -476,7 +502,7 @@ static void format_lines(tw_ui *ui, tw_strbuf *sb, const char *text, bool error,
         } else if (len > 0 && p[len - 1] == ':' && p[0] != ' ') {
             plain_style(ui, sb, TW_STYLE_BOLD); /* section title */
         }
-        tw_strbuf_append_n(sb, p, len);
+        append_marked(ui, sb, p, len);
         tw_strbuf_append(sb, RESET "\n");
         first = false;
         p = next;
@@ -944,8 +970,27 @@ static void execute(tw_ui *ui, const char *typed)
     free(err_text);
     free(text);
 
+    if (ui->prefill != NULL) {
+        tw_line_set(&ui->line, ui->prefill); /* "edit": change the line and press Enter */
+        free(ui->prefill);
+        ui->prefill = NULL;
+        after_edit(ui);
+    }
     if (result == TW_CMD_QUIT)
         ui->quit = true;
+}
+
+/* tw_prefill_fn: keeps the text until the command returns (main thread). */
+static void ui_prefill(tw_app *app, const char *text)
+{
+    tw_ui *ui = app->ui;
+    free(ui->prefill);
+    size_t len = strlen(text);
+    ui->prefill = malloc(len + 2);
+    if (ui->prefill != NULL) {
+        ui->prefill[0] = '/'; /* commands are typed with a slash here */
+        memcpy(ui->prefill + 1, text, len + 1);
+    }
 }
 
 static void on_enter(tw_ui *ui)
@@ -1248,6 +1293,7 @@ static void ui_free(tw_ui *ui)
     free(ui->draft);
     free(ui->search_saved);
     free(ui->pending_open);
+    free(ui->prefill);
     if (ui->prev_valid)
         tw_canvas_free(&ui->prev);
     tw_strbuf_free(&ui->out);
@@ -1344,6 +1390,8 @@ bool tw_ui_run(tw_app *app, const tw_ui_options *options)
     app->ui = &ui;
     app->emit = ui_emit;
     app->on_result = ui_on_result;
+    app->prefill = ui_prefill;
+    app->marks = true;
 
     pthread_mutex_lock(&ui.lock);
     start_intro(&ui);
@@ -1415,6 +1463,8 @@ bool tw_ui_run(tw_app *app, const tw_ui_options *options)
     tw_term_restore();
     app->emit = tw_app_emit_plain;
     app->on_result = NULL;
+    app->prefill = NULL;
+    app->marks = false;
     app->ui = NULL;
     ui_free(&ui);
     return true;

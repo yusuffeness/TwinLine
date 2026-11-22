@@ -1,0 +1,3 @@
+error: there is no line 0; the document has 100 lines.
+error: lines 99-101 are not in the document (1-100).
+error: usage: find TEXT

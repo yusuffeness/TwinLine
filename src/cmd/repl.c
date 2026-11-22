@@ -29,10 +29,7 @@ void tw_repl_run(tw_app *app)
 
         if (getline(&line, &cap, stdin) < 0) { /* end of input (Ctrl+D) */
             putchar('\n');
-            pthread_mutex_lock(&app->session.lock);
-            bool dirty = app->session.dirty;
-            pthread_mutex_unlock(&app->session.lock);
-            if (dirty)
+            if (tw_app_dirty_buffers(app) > 0)
                 fputs("warning: input ended; unsaved changes were discarded.\n", stderr);
             break;
         }

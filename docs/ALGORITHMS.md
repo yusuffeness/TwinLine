@@ -141,3 +141,31 @@ On the 1 MiB corpus of the original course project (14,497 lines), on a
 2-core virtual machine, the original program took 11.1 s and the default mode
 0.72 s, with the same 67 identical pairs, 100 near duplicates and most similar
 pair.
+
+## 8. Editing, undo and large files
+
+Every change to a document is a **splice**: `remove` lines starting at an
+index are replaced by `count` new lines. Append, insert, delete and replace
+are all splices, so the undo history only needs to know one operation. Each
+recorded edit keeps copies of the lines it removed and of the lines it put
+in their place; undo splices the old lines back, redo splices the new ones
+in again.
+
+Every state of the history has an id. A buffer remembers the id of the state
+it was last opened or saved in, and is "modified" exactly when the current
+id differs, so undoing back to the save makes the buffer clean again. The
+history keeps 1,000 edits; older ones are forgotten.
+
+Files of 8 MiB and more are loaded in **large-file mode**. The file is mapped
+with `mmap(MAP_PRIVATE)`, and each line terminator inside the mapping is
+overwritten with a NUL, so the lines are used where they are, without a copy
+or an allocation each. Writes go to private copy-on-write pages, never to the
+file. A line that ends at the end of the file without a terminator has no
+byte left for its NUL and is the only one copied. Lines added later are
+ordinary allocations; the document tells the two apart by checking whether a
+line's address falls inside the mapping.
+
+Saving writes a new file and renames it over the old one, so the mapping
+(which still refers to the old file) stays valid. As with any memory-mapped
+file, another program truncating the file while it is open can make TwinLine
+fail; editors usually accept that trade-off for large files.

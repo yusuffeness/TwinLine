@@ -5,6 +5,7 @@
  */
 #include <dirent.h>
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -164,6 +165,67 @@ TW_TEST(save_into_missing_directory_fails_cleanly)
     TW_CHECK_EQ_SIZE(count_temp_files(), 0);
 }
 
+/* Large-file mode: the same parsing rules, with lines inside the mapping. */
+TW_TEST(mapped_load_matches_normal_load)
+{
+    static const char content[] = "\xEF\xBB\xBF"
+                                  "first\r\nsecond\n\nfourth\r\r\nlast without newline";
+    TW_CHECK(WRITE_LITERAL("mapped.txt", content));
+    tw_document mapped;
+    tw_document plain;
+    int err = 0;
+    TW_CHECK_EQ_INT(tw_file_load_ex(temp_path("mapped.txt"), &mapped, &err, 0), TW_OK);
+    TW_CHECK_EQ_INT(tw_file_load_ex(temp_path("mapped.txt"), &plain, &err, SIZE_MAX), TW_OK);
+    TW_CHECK(mapped.map != NULL);
+    TW_CHECK(plain.map == NULL);
+    TW_CHECK_EQ_SIZE(mapped.count, plain.count);
+    TW_CHECK_EQ_SIZE(mapped.count, 5);
+    for (size_t i = 0; i < mapped.count && i < plain.count; i++)
+        TW_CHECK_EQ_STR(mapped.lines[i], plain.lines[i]);
+    TW_CHECK_EQ_STR(mapped.lines[0], "first");
+    TW_CHECK_EQ_STR(mapped.lines[3], "fourth");
+    TW_CHECK_EQ_STR(mapped.lines[4], "last without newline");
+
+    /* A mapped document can be edited, cloned and saved like any other. */
+    static const char *const text[] = {"new line"};
+    TW_CHECK_EQ_INT(tw_document_splice_copy(&mapped, 1, 2, text, 1), TW_OK);
+    tw_document copy;
+    TW_CHECK_EQ_INT(tw_document_clone(&mapped, &copy), TW_OK);
+    TW_CHECK(copy.map == NULL);
+    TW_CHECK_EQ_STR(copy.lines[1], "new line");
+    TW_CHECK_EQ_INT(tw_file_save(temp_path("mapped.txt"), &mapped, &err), TW_OK);
+    tw_document_free(&mapped);
+
+    tw_document again;
+    TW_CHECK_EQ_INT(tw_file_load_ex(temp_path("mapped.txt"), &again, &err, 0), TW_OK);
+    TW_CHECK_EQ_SIZE(again.count, 4);
+    TW_CHECK_EQ_STR(again.lines[3], "last without newline");
+    tw_document_free(&again);
+    tw_document_free(&copy);
+    tw_document_free(&plain);
+}
+
+TW_TEST(mapped_load_small_and_empty_files)
+{
+    tw_document doc;
+    int err = 0;
+    /* Below the threshold: read normally. */
+    TW_CHECK(WRITE_LITERAL("small.txt", "a\nb\n"));
+    TW_CHECK_EQ_INT(tw_file_load_ex(temp_path("small.txt"), &doc, &err, 1024), TW_OK);
+    TW_CHECK(doc.map == NULL);
+    TW_CHECK_EQ_SIZE(doc.count, 2);
+    tw_document_free(&doc);
+    /* Empty files cannot be mapped. */
+    TW_CHECK(WRITE_LITERAL("empty-map.txt", ""));
+    TW_CHECK_EQ_INT(tw_file_load_ex(temp_path("empty-map.txt"), &doc, &err, 0), TW_OK);
+    TW_CHECK(doc.map == NULL);
+    TW_CHECK_EQ_SIZE(doc.count, 0);
+    tw_document_free(&doc);
+    /* A missing file is still reported. */
+    TW_CHECK_EQ_INT(tw_file_load_ex(temp_path("nope.txt"), &doc, &err, 0), TW_ERR_IO);
+    TW_CHECK_EQ_INT(err, ENOENT);
+}
+
 static void remove_temp_dir(void)
 {
     DIR *dir = opendir(temp_dir);
@@ -197,6 +259,8 @@ int main(void)
     TW_RUN(save_and_load_round_trip);
     TW_RUN(save_replaces_content_and_keeps_permissions);
     TW_RUN(save_into_missing_directory_fails_cleanly);
+    TW_RUN(mapped_load_matches_normal_load);
+    TW_RUN(mapped_load_small_and_empty_files);
 
     remove_temp_dir();
     return tw_test_summary();

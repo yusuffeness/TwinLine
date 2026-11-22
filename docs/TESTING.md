@@ -91,7 +91,8 @@ rendered and checked in a test.
 
 `tests/integration/tui_smoke.py` starts the real binary in a pseudo-terminal,
 types keys (menus, Tab completion, history search, paste, Ctrl+C) and waits
-for the expected text on the screen. The first session runs with animations
+for the expected text on the screen. It also edits a line through `/edit`,
+undoes the change, searches and opens a second buffer. The first session runs with animations
 and the second with `--no-animation`, so both drawing paths are covered. It needs a POSIX system and runs in CI
 on Linux and macOS, also under the sanitizers and Valgrind
 (`TWINLINE_TUI_TIMEOUT` raises its time limit for slow runs).

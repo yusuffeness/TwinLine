@@ -17,6 +17,12 @@ typedef struct tw_document {
     char **lines; /* each line is NUL-terminated and contains no '\n' */
     size_t count; /* number of lines */
     size_t cap;   /* allocated slots in `lines` */
+
+    /* Large-file mode: a private memory mapping of the file the document was
+     * loaded from. Lines inside it are not separately allocated; every other
+     * line is. NULL when the document has no mapping. */
+    char *map;
+    size_t map_len;
 } tw_document;
 
 /* Initialises an empty document. */
@@ -31,6 +37,20 @@ tw_status tw_document_push(tw_document *doc, char *line);
 
 /* Appends a copy of `text`. */
 tw_status tw_document_append(tw_document *doc, const char *text);
+
+/*
+ * Replaces `remove` lines starting at index `at` with the `count` lines in
+ * `insert`, which the document takes over on success (on failure the caller
+ * still owns them). The removed lines are released. Requires
+ * `at <= doc->count` and `remove <= doc->count - at`; returns TW_ERR_INVALID
+ * otherwise.
+ */
+tw_status tw_document_splice(tw_document *doc, size_t at, size_t remove, char **insert,
+                             size_t count);
+
+/* Same as tw_document_splice(), but inserts copies of `texts`. */
+tw_status tw_document_splice_copy(tw_document *doc, size_t at, size_t remove,
+                                  const char *const *texts, size_t count);
 
 /* Makes `dst` a deep copy of `src`. `dst` must not own any memory. */
 tw_status tw_document_clone(const tw_document *src, tw_document *dst);
